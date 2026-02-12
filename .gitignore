@@ -50,6 +50,11 @@ app.*.map.json
 /android/app/profile
 /android/app/release
 
+# Django Static files
+static/
+staticfiles/
+static_root/
+
 maps/
 UNISA/
 locale/
