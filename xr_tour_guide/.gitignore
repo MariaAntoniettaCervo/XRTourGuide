@@ -5,7 +5,7 @@ migrations/**/*.py
 certbot/
 unisa_file/
 san_nilo/
-init_unisa_tour.py
+# init_unisa_tour.py
 # init_san_nilo_tour.py
 .community.env
 it_IT-riccardo-x_low.onnx
