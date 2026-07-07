@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -9,6 +11,9 @@ import 'user_settings.dart'; // Ensure this import is correct for UserProfileScr
 import 'review_list.dart';
 import 'main.dart'; // Adjust import based on your project structure
 import "package:easy_localization/easy_localization.dart";
+import 'services/analytics_service.dart';
+import 'utils/responsive.dart';
+import 'utils/platform_page_route.dart';
 
 
 // Enum to track which profile screen is currently active
@@ -34,6 +39,7 @@ class UserDetailScreen extends ConsumerStatefulWidget {
 
 class _UserDetailScreenState extends ConsumerState<UserDetailScreen> {
   late TourService _tourService;
+  late AnalyticsService _analytics;
 
   // Current screen state - starts with main profile
   ProfileScreenState _currentScreen = ProfileScreenState.main;
@@ -54,6 +60,7 @@ class _UserDetailScreenState extends ConsumerState<UserDetailScreen> {
   void initState() {
     super.initState();
     _tourService = ref.read(tourServiceProvider);
+    _analytics = ref.read(analyticsServiceProvider);
     if(widget.isOffline) {
       _isLoadingUserDetails = false;
       _isLoadingReviews = false;
@@ -85,7 +92,7 @@ class _UserDetailScreenState extends ConsumerState<UserDetailScreen> {
         setState(() {
           _isLoadingUserDetails = false;
         });
-        _showError('Error loading user Details');
+        _showError('error_loading_user_details'.tr());
       }
     }
   }
@@ -107,7 +114,7 @@ class _UserDetailScreenState extends ConsumerState<UserDetailScreen> {
         setState(() {
           _isLoadingReviews = false;
         });
-        _showError('Error loading nearby tours');
+        _showError('error_loading_reviews'.tr());
       }
     }
   }
@@ -129,7 +136,7 @@ class _UserDetailScreenState extends ConsumerState<UserDetailScreen> {
   // Navigate to user settings
   void _navigateToUserSettings() async {
     final result = await Navigator.of(context).push(
-      MaterialPageRoute(
+      platformPageRoute(
         builder: (context) => UserProfileScreen(),
       ),
     );
@@ -158,206 +165,236 @@ class _UserDetailScreenState extends ConsumerState<UserDetailScreen> {
       body: SafeArea(
         child: Stack(
           children: [
-            Column(
-              children: [
-                // Profile header with image, name and email
-                SizedBox(
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(vertical: 30),
-                    child: Column(
-                      children: [
-                        // Profile image with camera icon
-                        Stack(
-                          children: [
-                            // Profile image with border
-                            Container(
-                              width: 100,
-                              height: 100,
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                border: Border.all(
-                                  color: AppColors.primary,
-                                  width: 2,
-                                ),
-                              ),
-                              child: ClipRRect(
-                                borderRadius: BorderRadius.circular(50),
-                                child: Container(
-                                  color: Colors.blue.shade100,
-                                  child: const Icon(
-                                    Icons.person,
-                                    size: 70,
-                                    color: AppColors.accent,
-                                  )
-                                ),
-                              ),
-                            ),
-                            // // Camera icon for changing profile picture
-                            // Positioned(
-                            //   bottom: 0,
-                            //   right: 0,
-                            //   child: Container(
-                            //     padding: const EdgeInsets.all(4),
-                            //     decoration: BoxDecoration(
-                            //       color: AppColors.background,
-                            //       shape: BoxShape.circle,
-                            //       border: Border.all(
-                            //         color: AppColors.primary,
-                            //         width: 2,
-                            //       ),
-                            //     ),
-                            //     child: const Icon(
-                            //       Icons.camera_alt,
-                            //       color: AppColors.primary,
-                            //       size: 20,
-                            //     ),
-                            //   ),
-                            // ),
-                          ],
-                        ),
-                        const SizedBox(height: 16),
-                        // User name
-                        Text(
-                          '${_user!.name} ${_user!.surname}',
-                          style: const TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
-                            color: AppColors.textPrimary,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        // User email
-                        Text(
-                          _user!.mail,
-                          style: const TextStyle(
-                            fontSize: 14,
-                            color: AppColors.textSecondary,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Center(
-                          child: Row(
+            SingleChildScrollView(
+              padding: const EdgeInsets.only(bottom: 16), // To avoid bottom nav bar
+              child: Column(
+                children: [
+                  // Profile header with image, name and email
+                  SizedBox(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(vertical: 30),
+                      child: Column(
+                        children: [
+                          Stack(
                             children: [
-                              const SizedBox(width: 165),
-                              const Icon(
-                                Icons.location_city,
-                                color: AppColors.textSecondary,
-                              ),
-                              const SizedBox(width: 4),
-                              Text(
-                                _user!.city,
-                                style: const TextStyle(
-                                  fontSize: 14,
-                                  color: AppColors.textSecondary,
+                              Container(
+                                width: 100,
+                                height: 100,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  border: Border.all(
+                                    color: AppColors.primary,
+                                    width: 2,
+                                  ),
+                                ),
+                                child: ClipRRect(
+                                  borderRadius: BorderRadius.circular(50),
+                                  child: Container(
+                                    color: Colors.blue.shade100,
+                                    child: const Icon(
+                                      Icons.person,
+                                      size: 70,
+                                      color: AppColors.accent,
+                                    )
+                                  ),
                                 ),
                               ),
                             ],
                           ),
-                        ),
-                        const SizedBox(height: 10),
-                        if (_user!.description.isNotEmpty)
-                          Padding(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 16.0,
-                            ),
-                            child: Container(
-                              padding: const EdgeInsets.all(16),
-                              decoration: BoxDecoration(
-                                color: Colors.white,
-                                borderRadius: BorderRadius.circular(12),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.black.withOpacity(0.05),
-                                    blurRadius: 10,
-                                    offset: const Offset(0, 2),
-                                  ),
-                                ],
-                              ),
-                              child: Column(
-                                crossAxisAlignment:
-                                    CrossAxisAlignment.start,
-                                children: [
-                                  const SizedBox(height: 8),
-                                  Text(
-                                    _user!.description,
-                                    style: const TextStyle(
-                                      fontSize: 14,
-                                      color: AppColors.textSecondary,
-                                      height: 1.5,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                      ],
-                    ),
-                  ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
+                          const SizedBox(height: 16),
+                          // User name
                           Text(
-                            'your_reviews'.tr(),
+                            '${_user!.name} ${_user!.surname}',
                             style: TextStyle(
-                              fontSize: 23,
+                              fontSize: context.r.sp(20),
                               fontWeight: FontWeight.bold,
                               color: AppColors.textPrimary,
                             ),
                           ),
-                          const SizedBox(width: 8),
+                          const SizedBox(height: 4),
+                          // User email
                           Text(
-                            '(${_totalReviewCount.toString()})',
-                            style: const TextStyle(
-                              fontSize: 16,
+                            _user!.mail,
+                            style: TextStyle(
+                              fontSize: context.r.sp(14),
                               color: AppColors.textSecondary,
                             ),
                           ),
+                          const SizedBox(height: 4),
+                          Center(
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(
+                                  Icons.location_city,
+                                  color: AppColors.textSecondary,
+                                ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  _user!.city,
+                                  style: TextStyle(
+                                    fontSize: context.r.sp(14),
+                                    color: AppColors.textSecondary,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          if (_user!.description.isNotEmpty)
+                            Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16.0,
+                              ),
+                              child: Container(
+                                padding: const EdgeInsets.all(16),
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  borderRadius: BorderRadius.circular(12),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.black.withOpacity(0.05),
+                                      blurRadius: 10,
+                                      offset: const Offset(0, 2),
+                                    ),
+                                  ],
+                                ),
+                                child: Column(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.start,
+                                  children: [
+                                    const SizedBox(height: 8),
+                                    Text(
+                                      _user!.description,
+                                      style: TextStyle(
+                                        fontSize: context.r.sp(14),
+                                        color: AppColors.textSecondary,
+                                        height: 1.5,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
                         ],
                       ),
-                      // const SizedBox(height: 4),
-                      const SizedBox(height: 16),
-                      //load the first two elements from _reviews
-                    if (_isLoadingReviews)
-                      const Center(child: CircularProgressIndicator())
-                    else if (_reviews.isNotEmpty) ...[
-                      ListView.builder(
-                        shrinkWrap: true,
-                        physics: NeverScrollableScrollPhysics(),
-                        itemCount: _reviews.length,
-                        itemBuilder: (context, index) {
-                          return _buildReviewItem(
-                            name: _reviews[index].user,
-                            date: _reviews[index].date,
-                            rating: _reviews[index].rating,
-                            comment: _reviews[index].comment,
-                          );
-                        },
-                      ),
-                      const SizedBox(height: 16),
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Text(
+                              'your_reviews'.tr(),
+                              style: TextStyle(
+                                fontSize: context.r.sp(23),
+                                fontWeight: FontWeight.bold,
+                                color: AppColors.textPrimary,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              '(${_totalReviewCount.toString()})',
+                              style: TextStyle(
+                                fontSize: context.r.sp(16),
+                                color: AppColors.textSecondary,
+                              ),
+                            ),
+                          ],
+                        ),
+                        // const SizedBox(height: 4),
+                        const SizedBox(height: 16),
+                        //load the first two elements from _reviews
+                      if (_isLoadingReviews)
+                        const Center(child: CircularProgressIndicator())
+                      else if (_reviews.isNotEmpty) ...[
+                        ListView.builder(
+                          shrinkWrap: true,
+                          physics: NeverScrollableScrollPhysics(),
+                          itemCount: _reviews.length > 2 ? 2 : _reviews.length,
+                          itemBuilder: (context, index) {
+                            return _buildReviewItem(
+                              name: _reviews[index].user,
+                              date: _reviews[index].date,
+                              rating: _reviews[index].rating,
+                              comment: _reviews[index].comment,
+                            );
+                          },
+                        ),
+                        const SizedBox(height: 16),
+                        SizedBox(
+                          width: double.infinity,
+                          child: OutlinedButton(
+                            onPressed: () {
+              
+                              unawaited(_analytics.logEvent(name: "view_own_reviews", parameters: {"user_id": _user!.id, "source": "profile_screen"}));
+              
+                              Navigator.push(
+                                context,
+                                platformPageRoute(
+                                  builder:
+                                      (context) => ReviewListScreen(
+                                        isTour: false,
+                                        userId: _user!.id,
+                                        reviewCount: _user!.reviewCount,
+                                      ),
+                                ),
+                              );
+                            },
+                            style: OutlinedButton.styleFrom(
+                              side: const BorderSide(color: AppColors.primary),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                            ),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Text(
+                                  'more'.tr(),
+                                  style: TextStyle(
+                                    fontSize: context.r.sp(16),
+                                    fontWeight: FontWeight.bold,
+                                    color: AppColors.primary,
+                                  ),
+                                ),
+                                SizedBox(width: 4),
+                                Icon(
+                                  Icons.keyboard_arrow_down,
+                                  size: 20,
+                                  color: AppColors.primary,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ] else ...[
+                        Padding(
+                          padding: EdgeInsets.symmetric(vertical: 24.0),
+                          child: Center(
+                            child: Text(
+                              "no_reviews".tr(),
+                              style: TextStyle(
+                                fontSize: context.r.sp(16),
+                                color: AppColors.textSecondary,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ], 
+                      SizedBox(height: 16),
                       SizedBox(
                         width: double.infinity,
                         child: OutlinedButton(
-                          //TODO: Navigate to all review page
                           onPressed: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder:
-                                    (context) => ReviewListScreen(
-                                      isTour: false,
-                                      userId: _user!.id,
-                                      reviewCount: _user!.reviewCount,
-                                    ),
-                              ),
-                            );
+                            _showReportDialog();
                           },
                           style: OutlinedButton.styleFrom(
-                            side: const BorderSide(color: AppColors.primary),
+                            side: const BorderSide(color: Colors.redAccent),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(8),
                             ),
@@ -367,42 +404,31 @@ class _UserDetailScreenState extends ConsumerState<UserDetailScreen> {
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
                               Text(
-                                'more'.tr(),
+                                'report_test'.tr(),
                                 style: TextStyle(
-                                  fontSize: 16,
+                                  fontSize: context.r.sp(16),
                                   fontWeight: FontWeight.bold,
-                                  color: AppColors.primary,
+                                  color: Colors.redAccent,
                                 ),
                               ),
                               SizedBox(width: 4),
                               Icon(
-                                Icons.keyboard_arrow_down,
+                                Icons.report_problem,
                                 size: 20,
-                                color: AppColors.primary,
+                                color: Colors.redAccent,
                               ),
                             ],
                           ),
                         ),
                       ),
-                    ] else ...[
-                      Padding(
-                        padding: EdgeInsets.symmetric(vertical: 24.0),
-                        child: Center(
-                          child: Text(
-                            "no_reviews".tr(),
-                            style: TextStyle(
-                              fontSize: 16,
-                              color: AppColors.textSecondary,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ], ],
+              
+                      ],
+                    ),
                   ),
-                ),
-                // // Bottom navigation bar
-                // _buildBottomNavBar(context, 1), // 1 = Profile tab selected
-              ],
+                  // // Bottom navigation bar
+                  // _buildBottomNavBar(context, 1), // 1 = Profile tab selected
+                ],
+              ),
             ),
             Positioned(
               top: 8,
@@ -422,6 +448,134 @@ class _UserDetailScreenState extends ConsumerState<UserDetailScreen> {
         ),
       ),
       bottomNavigationBar: _buildBottomNavBar(context, 1),
+    );
+  }
+
+  Future<void> _showReportDialog() async {
+    final titleController = TextEditingController();
+    final descriptionController = TextEditingController();
+    bool isSending = false;
+
+    final borderStyle = OutlineInputBorder(
+      borderRadius: BorderRadius.all(Radius.circular(8)),
+      borderSide: BorderSide(color: AppColors.primary, width: 1.5),
+    );
+
+    await showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              title: Text("report_test".tr()),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: titleController,
+                    decoration: InputDecoration(
+                      labelText: "title".tr(),
+                      hintText: "title_hint".tr(),
+                      border: borderStyle,
+                      enabledBorder: borderStyle,
+                      focusedBorder: borderStyle.copyWith(borderSide: borderStyle.borderSide.copyWith(color: AppColors.primary, width: 2))
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: descriptionController,
+                    minLines: 3,
+                    maxLines: 6,
+                    decoration: InputDecoration(
+                      labelText: "description".tr(),
+                      hintText: "description_hint".tr(),
+                      border: borderStyle,
+                      enabledBorder: borderStyle,
+                      focusedBorder: borderStyle.copyWith(borderSide: borderStyle.borderSide.copyWith(color: AppColors.primary, width: 2))
+                    ),
+                    
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed:
+                      isSending ? null : () => Navigator.of(context).pop(),
+                  child: Text("cancel".tr()),
+                ),
+                ElevatedButton(
+                  onPressed:
+                      isSending
+                          ? null
+                          : () async {
+                            final title = titleController.text.trim();
+                            final description =
+                                descriptionController.text.trim();
+
+                            if (title.isEmpty || description.isEmpty) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(
+                                    "report_alert".tr(),
+                                  ),
+                                  backgroundColor: Colors.red,
+                                ),
+                              );
+                              return;
+                            }
+
+                            setState(() => isSending = true);
+
+                            try {
+                              await _analytics.logEvent(
+                                name: "user_report",
+                                parameters: {
+                                  "title": title,
+                                  "description": description,
+                                  "source": "profile_report_dialog",
+                                },
+                              );
+
+                              Navigator.of(context).pop();
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(
+                                    "report_sent".tr(),
+                                  ),
+                                  backgroundColor: Colors.green,
+                                ),
+                              );
+                            } catch (e) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(
+                                    "report_failed".tr(),
+                                  ),
+                                  backgroundColor: Colors.red,
+                                ),
+                              );
+                            } finally {
+                              setState(() => isSending = false);
+                            }
+                          },
+                  child:
+                      isSending
+                          ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                          : Text("send".tr()),
+                ),
+              ],
+            );
+          },
+        );
+      },
     );
   }
 
@@ -481,7 +635,7 @@ class _UserDetailScreenState extends ConsumerState<UserDetailScreen> {
                   Text(
                     'guest'.tr(), // As shown in profile_guest.jpg
                     style: TextStyle(
-                      fontSize: 20,
+                      fontSize: context.r.sp(20),
                       fontWeight: FontWeight.bold,
                       color: AppColors.textPrimary,
                     ),
@@ -498,7 +652,7 @@ class _UserDetailScreenState extends ConsumerState<UserDetailScreen> {
                             onPressed: () {
                               // TODO: Implement Log In navigation
                               Navigator.of(context).pushAndRemoveUntil(
-                                MaterialPageRoute(
+                                platformPageRoute(
                                   builder: (context) => const AuthFlowScreen(),
                                 ),
                                 (route) => false,
@@ -513,7 +667,7 @@ class _UserDetailScreenState extends ConsumerState<UserDetailScreen> {
                             child: Text(
                               'login'.tr(), // As shown in profile_guest.jpg
                               style: TextStyle(
-                                fontSize: 16,
+                                fontSize: context.r.sp(16),
                                 fontWeight: FontWeight.bold,
                               ),
                             ),
@@ -526,7 +680,7 @@ class _UserDetailScreenState extends ConsumerState<UserDetailScreen> {
                         //   child: ElevatedButton(
                         //     onPressed: () {
                         //       // TODO: Implement Registrati navigation (Sign Up)
-                        //       print('Navigate to Registrati (Sign Up) screen');
+                        //       debugPrint('Navigate to Registrati (Sign Up) screen');
                         //     },
                         //     style: ElevatedButton.styleFrom(
                         //       backgroundColor: AppColors.primary,
@@ -538,7 +692,7 @@ class _UserDetailScreenState extends ConsumerState<UserDetailScreen> {
                         //     child: const Text(
                         //       'Registrati', // As shown in profile_guest.jpg
                         //       style: TextStyle(
-                        //         fontSize: 16,
+                        //         fontSize: context.r.sp(16),
                         //         fontWeight: FontWeight.bold,
                         //       ),
                         //     ),
@@ -634,16 +788,16 @@ class _UserDetailScreenState extends ConsumerState<UserDetailScreen> {
                   children: [
                     Text(
                       name,
-                      style: const TextStyle(
-                        fontSize: 16,
+                      style: TextStyle(
+                        fontSize: context.r.sp(16),
                         fontWeight: FontWeight.bold,
                         color: AppColors.textPrimary,
                       ),
                     ),
                     Text(
                       date,
-                      style: const TextStyle(
-                        fontSize: 12,
+                      style: TextStyle(
+                        fontSize: context.r.sp(12),
                         color: AppColors.textSecondary,
                       ),
                     ),
@@ -664,8 +818,8 @@ class _UserDetailScreenState extends ConsumerState<UserDetailScreen> {
                     const SizedBox(width: 4),
                     Text(
                       rating.toString(),
-                      style: const TextStyle(
-                        fontSize: 14,
+                      style: TextStyle(
+                        fontSize: context.r.sp(14),
                         fontWeight: FontWeight.bold,
                         color: AppColors.textPrimary,
                       ),
@@ -681,8 +835,8 @@ class _UserDetailScreenState extends ConsumerState<UserDetailScreen> {
           // Review comment
           Text(
             comment,
-            style: const TextStyle(
-              fontSize: 14,
+            style: TextStyle(
+              fontSize: context.r.sp(14),
               color: AppColors.textSecondary,
               height: 1.5,
             ),
@@ -696,7 +850,7 @@ class _UserDetailScreenState extends ConsumerState<UserDetailScreen> {
           //   child: const Text(
           //     'Read more',
           //     style: TextStyle(
-          //       fontSize: 14,
+          //       fontSize: context.r.sp(14),
           //       fontWeight: FontWeight.bold,
           //       color: AppColors.primary,
           //     ),
@@ -728,8 +882,8 @@ class _UserDetailScreenState extends ConsumerState<UserDetailScreen> {
             child: Text(
               'offline_mode_user_details'.tr(),
               textAlign: TextAlign.center,
-              style: const TextStyle(
-                fontSize: 16,
+              style: TextStyle(
+                fontSize: context.r.sp(16),
                 color: AppColors.textSecondary,
               ),
             ),

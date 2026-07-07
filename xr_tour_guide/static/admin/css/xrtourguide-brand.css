@@ -1,0 +1,10 @@
+/* Logo admin Unfold più grande */
+.sidebar-brand img,
+header a img,
+nav a img,
+a[aria-label] img {
+    height: 72px !important;
+    width: auto !important;
+    max-width: none !important;
+    object-fit: contain !important;
+}

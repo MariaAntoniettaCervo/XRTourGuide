@@ -1,7 +1,16 @@
 import os
 import django
+import sys
 from docx import Document
 import subprocess
+from pathlib import Path
+
+current_file = Path(__file__).resolve()
+project_root = current_file.parent.parent
+print(f"project root: {project_root}")
+if str(project_root) not in sys.path:
+    sys.path.append(str(project_root))
+
 
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'xr_tour_guide.settings')
 django.setup()
@@ -23,7 +32,7 @@ if not Tour.objects.filter(title='Cammino di San Nilo').exists():
         coordinates="40.071389,15.630556",
         category=Category.MIXED,
         description='Il Cammino di San Nilo attraversa alcuni dei luoghi più suggestivi del Cilento',
-        user=CustomUser.objects.get(username='username') #firstly register a user, after run this script
+        user=CustomUser.objects.get(username='xrtourguide') #firstly register a user, after run this script
     )
     print(f"Tour created: {tour_san_nilo.title}")
 else:

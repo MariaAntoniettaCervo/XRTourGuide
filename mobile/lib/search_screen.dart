@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'models/app_colors.dart';
@@ -6,6 +8,9 @@ import 'tour_details_page.dart';
 import 'models/tour.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import "package:easy_localization/easy_localization.dart";
+import 'services/analytics_service.dart';
+import 'utils/responsive.dart';
+import 'utils/platform_page_route.dart';
 
 
 class SearchScreen extends ConsumerStatefulWidget {
@@ -20,6 +25,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     with SingleTickerProviderStateMixin {
 
   late TourService _tourService;
+  late AnalyticsService _analytics;
 
   // Controller for the search text field
   final TextEditingController _searchController = TextEditingController();
@@ -39,6 +45,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   void initState() {
     super.initState();
     _tourService = ref.read(tourServiceProvider);
+    _analytics = ref.read(analyticsServiceProvider);
     // Initialize filtered destinations with an empty list
     _filteredDestinations = [];
 
@@ -71,7 +78,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
 
   Future<void> _loadSearchResults(String searchTerm) async {
     try {
-      final tours = await _tourService.getToursBySearchTerm(searchTerm);
+      final language = context.locale.languageCode.toLowerCase();
+      
+      final tours = await _tourService.getToursBySearchTerm(searchTerm, language: language);
       if (mounted) {
         setState(() {
           _filteredDestinations = tours;
@@ -169,8 +178,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
                   opacity: _searchBarAnimation,
                   child: Container(
                     // Responsive width based on screen size
-                    width: screenWidth - 32,
-                    height: 50,
+                    width: double.infinity,
+                    height: context.r.buttonHeight(),
                     decoration: BoxDecoration(
                       color: Colors.white,
                       borderRadius: BorderRadius.circular(25),
@@ -192,7 +201,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
                         hintText: 'search_hint'.tr(),
                         hintStyle: TextStyle(
                           color: AppColors.textSecondary.withOpacity(0.7),
-                          fontSize: 16,
+                          fontSize: context.r.sp(16),
                         ),
                         prefixIcon: const Icon(
                           Icons.search,
@@ -221,9 +230,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
                       ),
                       onChanged: (value) {
                         // Refresh UI when text changes to show/hide clear button
-                        //TODO: Implement search logic here
                         _onSearchChanged(value);
-                        // setState(() {});
                       },
                     ),
                   ),
@@ -249,13 +256,21 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
                           destination.title,
                           destination.id,
                           onTap: () {
-                            // Handle destination selection
-                            print(
-                              'Selected destination: ${destination.title}',
+                            unawaited(
+                              _analytics.logEvent(
+                                name: "tour_open",
+                                parameters: {
+                                  "tour_id": destination.id,
+                                  "is_guest": widget.isGuest.toString(),
+                                  "source": "search_screen",
+                                },
+                              ),
                             );
+
+                            // Handle destination selection
                             Navigator.push(
                               context,
-                              MaterialPageRoute(
+                              platformPageRoute(
                                 builder:
                                     (context) => TourDetailScreen(
                                       tourId: destination.id,
@@ -318,21 +333,12 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
                   // Destination name
                   Text(
                     name,
-                    style: const TextStyle(
-                      fontSize: 16,
+                    style: TextStyle(
+                      fontSize: context.r.sp(16),
                       fontWeight: FontWeight.w500,
                       color: AppColors.textPrimary,
                     ),
                   ),
-                  // Show description if available
-                  // if (description.isNotEmpty)
-                  //   Text(
-                  //     description,
-                  //     style: TextStyle(
-                  //       fontSize: 14,
-                  //       color: AppColors.textSecondary.withOpacity(0.7),
-                  //     ),
-                  //   ),
                 ],
               ),
             ),

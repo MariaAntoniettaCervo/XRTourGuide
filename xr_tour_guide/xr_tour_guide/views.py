@@ -8,7 +8,7 @@ from django.core.paginator import Paginator
 import json
 
 
-admin.site.index_title = 'Dashboard'
+admin.site.index_title = "Dashboard"
 
 
 class DashboardView(UnfoldModelAdminViewMixin, TemplateView):
@@ -18,49 +18,64 @@ class DashboardView(UnfoldModelAdminViewMixin, TemplateView):
 
 
 def dashboard_callback(request, context):
-    user_tours = (
-        Tour.objects
-            .filter(parent_tours__isnull=True, is_subtour=False, user=request.user)
-            .annotate(
-                review_count=Count('reviews'),
-                avg_rating=Avg('reviews__rating'),
-                subtour_count=Count('sub_tours'),
-                waypoint_count=Count('waypoints')
-            )
-            .order_by('-creation_time')
+    if request.user.is_superuser:
+        tour_filter = {}
+    else:
+        tour_filter = {"user": request.user}
+
+    base_queryset = Tour.objects.filter(
+        parent_tours__isnull=True,
+        is_subtour=False,
+        **tour_filter
     )
 
-    total_tours = user_tours.count()
-    total_reviews = Review.objects.filter(tour__user=request.user).count()
-    total_waypoints = Waypoint.objects.filter(tour__user=request.user).count()
-    
-    avg_rating_result = Review.objects.filter(tour__user=request.user).aggregate(
-        avg=Avg('rating')
+    user_tours = (
+        base_queryset
+        .annotate(
+            review_count=Count("reviews", distinct=True),
+            avg_rating=Avg("reviews__rating"),
+            subtour_count=Count("sub_tours", distinct=True),
+            waypoint_count=Count("waypoints", distinct=True),
+        )
+        .order_by("-creation_time")
     )
-    avg_rating = avg_rating_result['avg']
+
+    total_tours = base_queryset.count()
+
+    total_reviews = Review.objects.filter(
+        tour__in=base_queryset
+    ).count()
+
+    total_waypoints = Waypoint.objects.filter(
+        tour__in=base_queryset
+    ).count()
+
+    avg_rating = Review.objects.filter(
+        tour__in=base_queryset
+    ).aggregate(avg=Avg("rating"))["avg"]
 
     category_distribution = (
-        user_tours
-            .values('category')
-            .annotate(count=Count('id'))
-            .order_by('category')
+        base_queryset
+        .values("category")
+        .annotate(count=Count("id"))
+        .order_by("category")
     )
-    
+
     category_data = {
-        'labels': [item['category'] for item in category_distribution],
-        'values': [item['count'] for item in category_distribution]
+        "labels": [item["category"] for item in category_distribution],
+        "values": [item["count"] for item in category_distribution],
     }
 
     status_distribution = (
-        user_tours
-            .values('status')
-            .annotate(count=Count('id'))
-            .order_by('status')
+        base_queryset
+        .values("status")
+        .annotate(count=Count("id"))
+        .order_by("status")
     )
-    
+
     status_data = {
-        'labels': [item['status'] for item in status_distribution],
-        'values': [item['count'] for item in status_distribution]
+        "labels": [item["status"] for item in status_distribution],
+        "values": [item["count"] for item in status_distribution],
     }
 
     paginator = Paginator(user_tours, 5)
@@ -76,5 +91,5 @@ def dashboard_callback(request, context):
         "category_data": json.dumps(category_data),
         "status_data": json.dumps(status_data),
     })
-    
+
     return context

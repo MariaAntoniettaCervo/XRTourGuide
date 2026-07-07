@@ -245,7 +245,7 @@ class _ZlibImageState extends ConsumerState<ZlibImage>
         throw Exception("Dati immagine vuoti");
       }
     } catch (e) {
-      print("Errore caricamento immagine Zlib: $e");
+      debugPrint("Errore caricamento immagine Zlib: $e");
       if (mounted && _currentKey == key) {
         setState(() {
           _error = e;

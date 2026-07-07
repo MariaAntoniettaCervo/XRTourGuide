@@ -18,9 +18,15 @@ class WaypointAdmin(UnfoldNestedStackedInline):
     model = Waypoint
     form = WaypointForm
     extra = 0
+    collapsible = True
+    
+    sortable_field_name = 'position'
+    ordering_field = 'position'
+    hide_ordering_field = True
+    
     verbose_name = _("Point of Interest")
     verbose_name_plural = _("Tour Points of Interest")
-    readonly_fields = ['display_existing_images']
+    readonly_fields = ['display_existing_images', 'display_existing_additional_images']
     
     def get_queryset(self, request):
         qs = super().get_queryset(request)
@@ -32,7 +38,7 @@ class WaypointAdmin(UnfoldNestedStackedInline):
     
     fieldsets = (
         (_('📍 Basic Information'), {
-            'fields': ('title', 'description'),
+            'fields': ('position', 'title', 'description'),
             'description': (
                 '<div style="background: light-dark(#dbeafe, #1e3a8a); padding: 12px; border-radius: 6px; '
                 'margin-bottom: 12px; border-left: 4px solid light-dark(#3b82f6, #60a5fa); '
@@ -41,6 +47,25 @@ class WaypointAdmin(UnfoldNestedStackedInline):
                 str(_('Start with a clear title and a brief description. You\'ll add details later.')) +
                 '</div>'
             )
+        }),
+        (_('ℹ️ Preliminary Information'), {
+            'fields': ('is_preliminary_info',),
+            'description': (
+                '<div style="background: light-dark(#eef2ff, #312e81); padding: 12px; border-radius: 6px; '
+                'margin-bottom: 12px; border-left: 4px solid light-dark(#6366f1, #a5b4fc); '
+                'color: light-dark(#312e81, #eef2ff);">'
+                '<strong>ℹ️ ' + str(_('What is this?')) + '</strong><br>' +
+                str(_('Enable this option when the point of interest is not a real geolocated stop, but an introductory or informational section shown at the beginning of the tour.')) +
+                '<br><br>'
+                '<strong>' + str(_('Effects:')) + '</strong>'
+                '<ul style="margin: 8px 0 0 18px; padding: 0;">'
+                '<li>' + str(_('It is shown in the itinerary and mobile app as preliminary information.')) + '</li>'
+                '<li>' + str(_('It is excluded from the map and geolocation-based navigation.')) + '</li>'
+                '<li>' + str(_('It is excluded from AI recognition and model training.')) + '</li>'
+                '<li>' + str(_('It is excluded from tour completion logic.')) + '</li>'
+                '</ul>'
+                '</div>'
+            ),
         }),
         (_('🗺️ Map Location'), {
             'fields': ('place', 'coordinates',),
@@ -66,7 +91,7 @@ class WaypointAdmin(UnfoldNestedStackedInline):
             )
         }),
         (_('🎬 Multimedia Content (Optional)'), {
-            'fields': ('pdf_item', 'video_item', 'audio_item', 'readme_text', 'additional_images', 'links'),
+            'fields': ('pdf_item', 'video_item', 'audio_item', 'readme_text', 'additional_images', 'display_existing_additional_images', 'links'),
             'classes': ('collapse',),
             'description': (
                 '<div style="background: light-dark(#e0e7ff, #3730a3); padding: 12px; border-radius: 6px; '
@@ -99,8 +124,15 @@ class WaypointAdmin(UnfoldNestedStackedInline):
                 '</div>'
             )
         
+        # html_parts = [
+        #     '<div style="background: light-dark(#ffffff, #1f2937); padding: 16px; border-radius: 8px; '
+        #     'border: 1px solid light-dark(#e5e7eb, #374151);">',
+        #     f'<p style="margin: 0 0 12px 0; font-weight: 600; color: light-dark(#374151, #e5e7eb);">📷 {images.count()} ' + str(_('images uploaded')) + '</p>',
+        #     '<div style="display: flex; flex-wrap: wrap; gap: 16px;">'
+        # ]
+        
         html_parts = [
-            '<div style="background: light-dark(#ffffff, #1f2937); padding: 16px; border-radius: 8px; '
+            '<div data-waypoint-gallery="1" style="background: light-dark(#ffffff, #1f2937); padding: 16px; border-radius: 8px; '
             'border: 1px solid light-dark(#e5e7eb, #374151);">',
             f'<p style="margin: 0 0 12px 0; font-weight: 600; color: light-dark(#374151, #e5e7eb);">📷 {images.count()} ' + str(_('images uploaded')) + '</p>',
             '<div style="display: flex; flex-wrap: wrap; gap: 16px;">'
@@ -122,38 +154,139 @@ class WaypointAdmin(UnfoldNestedStackedInline):
             
             img_url = f"/stream_minio_resource/?tour={img.waypoint.tour.pk}&waypoint={img.waypoint.pk}&file={img.image.name}"
             
+            # html_parts.append(f'''
+            #     <div style="width: 200px; border: 1px solid light-dark(#e5e7eb, #374151); border-radius: 8px; 
+            #          overflow: hidden; box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);">
+            #         <img src="{img_url}" 
+            #              alt="View image" 
+            #              onclick="window.open('{img_url}', '_blank')"
+            #              style="width: 100%; height: 160px; object-fit: cover; cursor: pointer;"
+            #              title="{_('Click to view image in full screen')}"
+            #         />
+            #         <div style="padding: 8px; background: light-dark(#ffffff, #1f2937); display: flex; 
+            #              justify-content: space-between; align-items: center;">
+            #             <span style="font-size: 0.75rem; color: light-dark(#6b7280, #9ca3af);">ID: {img.pk}</span>
+            #             {delete_link}
+            #         </div>
+            #     </div>
+            # ''')
+            
             html_parts.append(f'''
                 <div style="width: 200px; border: 1px solid light-dark(#e5e7eb, #374151); border-radius: 8px; 
                      overflow: hidden; box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);">
-                    <img src="{img_url}" 
-                         alt="View image" 
-                         onclick="window.open('{img_url}', '_blank')"
-                         style="width: 100%; height: 160px; object-fit: cover; cursor: pointer;"
-                         title="{_('Click to view image in full screen')}"
-                    />
-                    <div style="padding: 8px; background: light-dark(#ffffff, #1f2937); display: flex; 
+                <img src="data:image/gif;base64,R0lGODlhAQABAAAAACwAAAAAAQABAAA="
+                    data-waypoint-lazy-src="{img_url}"
+                    alt="View image"
+                    onclick="window.open('{img_url}', '_blank')"
+                    style="width: 100%; height: 160px; object-fit: cover; cursor: pointer; background: light-dark(#f3f4f6, #111827);"
+                    title="{_('Click to view image in full screen')}"
+                    loading="lazy"
+                    decoding="async"
+                />
+                <div style="padding: 8px; background: light-dark(#ffffff, #1f2937); display: flex; 
                          justify-content: space-between; align-items: center;">
                         <span style="font-size: 0.75rem; color: light-dark(#6b7280, #9ca3af);">ID: {img.pk}</span>
                         {delete_link}
                     </div>
                 </div>
             ''')
+
         
         html_parts.append('</div></div>')
         
+        return mark_safe(''.join(html_parts))
+    
+    @admin.display(description=_("🖼️ Additional Image Gallery"))
+    def display_existing_additional_images(self, obj):
+        if not obj or not obj.pk:
+            return mark_safe(
+                '<div style="background: light-dark(#fef3c7, #78350f); padding: 12px; border-radius: 6px; '
+                'border-left: 4px solid light-dark(#f59e0b, #fbbf24); color: light-dark(#78350f, #fef3c7);">'
+                '<p style="margin: 0; font-size: 0.875rem;">⚠️ ' + str(_('Save the point of interest first to upload additional images')) + '</p>'
+                '</div>'
+            )
+
+        images = WaypointViewImage.objects.filter(
+            waypoint=obj,
+            type_of_images=TypeOfImage.ADDITIONAL_IMAGES
+        )
+
+        if not images.exists():
+            return mark_safe(
+                '<div style="background: light-dark(#f3f4f6, #1f2937); padding: 12px; border-radius: 6px; '
+                'color: light-dark(#6b7280, #9ca3af);">'
+                '<p style="margin: 0; font-size: 0.875rem;">🖼️ ' + str(_('No additional images uploaded yet')) + '</p>'
+                '</div>'
+            )
+
+        html_parts = [
+            '<div data-waypoint-gallery="1" style="background: light-dark(#ffffff, #1f2937); padding: 16px; border-radius: 8px; '
+            'border: 1px solid light-dark(#e5e7eb, #374151);">',
+            f'<p style="margin: 0 0 12px 0; font-weight: 600; color: light-dark(#374151, #e5e7eb);">🖼️ {images.count()} ' + str(_('additional images uploaded')) + '</p>',
+            '<div style="display: flex; flex-wrap: wrap; gap: 16px;">'
+        ]
+
+        for img in images:
+            app_label = WaypointViewImage._meta.app_label
+            model_name = WaypointViewImage._meta.model_name
+
+            try:
+                change_url = reverse(f'admin:{app_label}_{model_name}_change', args=[img.pk])
+                manage_link = (
+                    f'<a href="{change_url}" '
+                    f'style="color: light-dark(#dc2626, #f87171); font-size: 0.75rem; font-weight: 500; text-decoration: none;" '
+                    f'target="_blank">🗑️ {_("Manage")}</a>'
+                )
+            except Exception:
+                manage_link = ''
+
+            img_url = f"/stream_minio_resource/?tour={img.waypoint.tour.pk}&waypoint={img.waypoint.pk}&file={img.image.name}"
+
+            html_parts.append(f'''
+                <div style="width: 200px; border: 1px solid light-dark(#e5e7eb, #374151); border-radius: 8px;
+                    overflow: hidden; box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);">
+                <img src="data:image/gif;base64,R0lGODlhAQABAAAAACwAAAAAAQABAAA="
+                    data-waypoint-lazy-src="{img_url}"
+                    alt="Additional image"
+                    onclick="window.open('{img_url}', '_blank')"
+                    style="width: 100%; height: 160px; object-fit: cover; cursor: pointer; background: light-dark(#f3f4f6, #111827);"
+                    title="{_('Click to view image in full screen')}"
+                    loading="lazy"
+                    decoding="async"
+                />
+                <div style="padding: 8px; background: light-dark(#ffffff, #1f2937); display: flex;
+                        justify-content: space-between; align-items: center;">
+                        <span style="font-size: 0.75rem; color: light-dark(#6b7280, #9ca3af);">ID: {img.pk}</span>
+                        {manage_link}
+                    </div>
+                </div>
+            ''')
+
+        html_parts.append('</div></div>')
         return mark_safe(''.join(html_parts))
     
     formfield_overrides = {
         PlainLocationField: {"widget": LocationWidget},
     }
     
+    def has_delete_permission(self, request, obj=None):
+        has_permission = super().has_delete_permission(request, obj)
+        if not has_permission:
+            return False
+        if obj is None:
+            return True
+        if not request.user.is_superuser and obj.user != request.user:
+            return False
+        return True
+    
     class Media:
         js = [
             'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js',
             'https://cdn.jsdelivr.net/simplemde/latest/simplemde.min.js',
-            'admin/js/init_maps.js',
+            # 'admin/js/init_maps.js',
             'admin/js/init_markdown_editor.js',
             'admin/js/hide_waypoint_coordinates.js',
+            'admin/js/preliminary_waypoint.js'
         ]
         css = {
             'all': [
@@ -191,6 +324,16 @@ class WaypointViewImageAdmin(ModelAdmin):
                 kwargs["queryset"] = Waypoint.objects.filter(tour__user=request.user)
         
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
+    
+    def has_delete_permission(self, request, obj=None):
+        has_permission = super().has_delete_permission(request, obj)
+        if not has_permission:
+            return False
+        if obj is None:
+            return True
+        if not request.user.is_superuser and obj.waypoint.tour.user != request.user:
+            return False
+        return True
 
 admin.site.register(WaypointViewImage, WaypointViewImageAdmin)
 
@@ -237,5 +380,15 @@ class WaypointViewLinkAdmin(ModelAdmin):
                 kwargs["queryset"] = Waypoint.objects.filter(tour__user=request.user)
         
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
-
+    
+    def has_delete_permission(self, request, obj=None):
+        has_permission = super().has_delete_permission(request, obj)
+        if not has_permission:
+            return False
+        if obj is None:
+            return True
+        if not request.user.is_superuser and obj.waypoint.tour.user != request.user:
+            return False
+        return True
+         
 admin.site.register(WaypointViewLink, WaypointViewLinkAdmin)

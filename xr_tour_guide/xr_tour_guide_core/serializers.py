@@ -26,17 +26,26 @@ class WaypointSerializer(serializers.ModelSerializer):
     lat = serializers.SerializerMethodField()
     lon = serializers.SerializerMethodField()
 
+    isPreliminaryInfo = serializers.BooleanField(
+        source="is_preliminary_info",
+        read_only=True
+    )
+
     class Meta:
         model = Waypoint
         fields = [
             'title', 'coordinates', 'tour', 'description',
-            'images', 'lat', 'lon', 'id'
+            'images', 'lat', 'lon', 'id', 'position', "is_preliminary_info", "isPreliminaryInfo"
         ]
 
     def get_lat(self, obj):
+        if not obj.coordinates:
+            return None
         return float(obj.coordinates.split(',')[0])
     
     def get_lon(self, obj):
+        if not obj.coordinates:
+            return None
         return float(obj.coordinates.split(',')[1])
     
     def get_pdf_name(self, obj):
@@ -62,7 +71,7 @@ class TourSerializer(serializers.ModelSerializer):
     rating_counter = serializers.SerializerMethodField()
     class Meta:
         model = Tour
-        fields = ['title', 'subtitle', 'place', 'category', 'description', 'user', 'lat', 'lon', 'default_img', 'creation_time', 'user_name', 'id', 'tot_view', 'l_edited', 'rating', 'rating_counter']
+        fields = ['title', 'subtitle', 'place', 'category', 'language', 'description', 'user', 'lat', 'lon', 'default_img', 'creation_time', 'user_name', 'id', 'tot_view', 'l_edited', 'rating', 'rating_counter', 'status']
 
 
     def get_rating_counter(self, obj):

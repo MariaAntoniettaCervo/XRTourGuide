@@ -22,6 +22,9 @@ from ..authentication import JWTFastAPIAuthentication
 import os
 import dotenv
 from django.http import HttpResponse
+from ..services.map_extract_service import ensure_pmtiles_for_tour
+from urllib.parse import quote
+
 
 dotenv.load_dotenv()
 
@@ -73,6 +76,12 @@ def parse_coordinates(coord_str):
             openapi.IN_QUERY,
             description="Longitude for distance-based sorting",
             type=openapi.TYPE_NUMBER
+        ),
+        openapi.Parameter(
+            'language',
+            openapi.IN_QUERY,
+            description="Filter tours by language",
+            type=openapi.TYPE_STRING
         )
     ],
     responses={200: TourSerializer(many=True)}
@@ -86,8 +95,12 @@ def tour_list(request):
     num_tours = request.GET.get('num_tours', None)
     lat = request.GET.get('lat', None)
     lon = request.GET.get('lon', None)
+    language = request.GET.get('language', '').lower()
 
     queryset = Tour.objects.filter(parent_tours__isnull=True, is_subtour=False)
+
+    if language:
+        queryset = queryset.filter(language__iexact=language)
 
     if category:
         queryset = queryset.filter(category__iexact=category)
@@ -186,13 +199,13 @@ def tour_details(request, pk):
 def tour_waypoints(request, tour_id):
     try:
         tour = Tour.objects.get(pk=tour_id)
-        waypoints = tour.waypoints.all()
+        waypoints = tour.waypoints.order_by('position', 'id')
         sub_tour_data = None
         if tour.category == Category.MIXED:
-            sub_tour = tour.sub_tours.all()
+            sub_tour = tour.sub_tours.order_by('id')
             sub_tour_data = []
             for st in sub_tour:
-                st_waypoints = st.waypoints.all()
+                st_waypoints = st.waypoints.order_by('position', 'id')
                 st_serializer = WaypointSerializer(st_waypoints, many=True)
                 st_data = {
                     'sub_tour': TourSerializer(st).data,
@@ -239,69 +252,94 @@ def increment_view_count(request):
 
     return Response({"detail": "View count incremented successfully"}, status=status.HTTP_200_OK)
 
-@swagger_auto_schema(
-    method='post',
-    operation_summary="Extract and download pmtiles file for a tour based on waypoint coordinates",
-    manual_parameters=[
-        openapi.Parameter(
-            'tour_id',
-            openapi.IN_PATH,
-            description="ID of the tour",
-            type=openapi.TYPE_INTEGER,
-            required=True
-        )
-    ],
-    responses={
-        200: openapi.Response(description="Pmtiles file returned successfully"),
-        400: openapi.Response(description="Tour not found or invalid waypoints")
-    }
-)
+# @swagger_auto_schema(
+#     method='post',
+#     operation_summary="Extract and download pmtiles file for a tour based on waypoint coordinates",
+#     manual_parameters=[
+#         openapi.Parameter(
+#             'tour_id',
+#             openapi.IN_PATH,
+#             description="ID of the tour",
+#             type=openapi.TYPE_INTEGER,
+#             required=True
+#         )
+#     ],
+#     responses={
+#         200: openapi.Response(description="Pmtiles file returned successfully"),
+#         400: openapi.Response(description="Tour not found or invalid waypoints")
+#     }
+# )
+# @api_view(['POST'])
+# @authentication_classes([JWTFastAPIAuthentication])
+# @permission_classes([IsAuthenticated])
+# def cut_map(request, tour_id):
+#     storage = MinioStorage()
+
+#     try:
+#         tour = Tour.objects.get(pk=tour_id)
+#     except Tour.DoesNotExist:
+#         return JsonResponse({"error": "Tour not found"}, status=400)
+
+#     waypoints = tour.waypoints.order_by('position', 'id')
+#     if not waypoints.exists():
+#         return JsonResponse({"error": "No waypoints found for this tour"}, status=400)
+
+#     lons, lats = [], []
+#     for wp in waypoints:
+#         try:
+#             lat_str, lon_str = wp.coordinates.split(",")
+#             lat, lon = float(lat_str.strip()), float(lon_str.strip())
+#             lats.append(lat)
+#             lons.append(lon)
+#         except Exception:
+#             continue
+
+#     if not lats or not lons:
+#         return JsonResponse({"error": "Waypoints have invalid coordinates"}, status=400)
+
+#     min_lon, max_lon = min(lons), max(lons)
+#     min_lat, max_lat = min(lats), max(lats)
+#     print("BBOX: ", min_lon, min_lat, max_lon, max_lat, flush=True)
+#     bbox = f"{min_lon - 0.1},{min_lat - 0.1},{max_lon + 0.1},{max_lat + 0.1}"
+#     print("BBOX: ", bbox, flush=True)
+
+#     payload = {
+#         "tour_id": str(tour_id),
+#         "bbox": bbox
+#     }
+#     url = os.getenv("PMTILES_URL")
+#     headers = {"Content-type": "application/json"}
+#     response = requests.post(url, headers=headers, json=payload)
+#     if response.status_code != 200:
+#         return JsonResponse({"error": "Failed to extract pmtiles"}, status=400)
+    
+#     file = storage.open(f"/{tour_id}/tour_{tour_id}.pmtiles", mode='rb')
+#     return FileResponse(file, as_attachment=True, filename=f"tour_{tour_id}.pmtiles")
+
 @api_view(['POST'])
 @authentication_classes([JWTFastAPIAuthentication])
 @permission_classes([IsAuthenticated])
 def cut_map(request, tour_id):
+    result = ensure_pmtiles_for_tour(tour_id)
+    if not result.get("ok"):
+        return JsonResponse({"error": result.get("error", "Failed to extract pmtiles")}, status=400)
+
     storage = MinioStorage()
-
-    try:
-        tour = Tour.objects.get(pk=tour_id)
-    except Tour.DoesNotExist:
-        return JsonResponse({"error": "Tour not found"}, status=400)
-
-    waypoints = tour.waypoints.all()
-    if not waypoints.exists():
-        return JsonResponse({"error": "No waypoints found for this tour"}, status=400)
-
-    lons, lats = [], []
-    for wp in waypoints:
-        try:
-            lat_str, lon_str = wp.coordinates.split(",")
-            lat, lon = float(lat_str.strip()), float(lon_str.strip())
-            lats.append(lat)
-            lons.append(lon)
-        except Exception:
-            continue
-
-    if not lats or not lons:
-        return JsonResponse({"error": "Waypoints have invalid coordinates"}, status=400)
-
-    min_lon, max_lon = min(lons), max(lons)
-    min_lat, max_lat = min(lats), max(lats)
-    print("BBOX: ", min_lon, min_lat, max_lon, max_lat, flush=True)
-    bbox = f"{min_lon - 0.1},{min_lat - 0.1},{max_lon + 0.1},{max_lat + 0.1}"
-    print("BBOX: ", bbox, flush=True)
-
-    payload = {
-        "tour_id": str(tour_id),
-        "bbox": bbox
-    }
-    url = os.getenv("PMTILES_URL")
-    headers = {"Content-type": "application/json"}
-    response = requests.post(url, headers=headers, json=payload)
-    if response.status_code != 200:
-        return JsonResponse({"error": "Failed to extract pmtiles"}, status=400)
-    
-    file = storage.open(f"/{tour_id}/tour_{tour_id}.pmtiles", mode='rb')
+    file = storage.open(result["key"], mode='rb')
     return FileResponse(file, as_attachment=True, filename=f"tour_{tour_id}.pmtiles")
+
+@api_view(['GET'])
+@authentication_classes([JWTFastAPIAuthentication])
+@permission_classes([IsAuthenticated])
+def download_offline_bundle(request, tour_id):
+    storage = MinioStorage()
+    key = f"{tour_id}/offline/offline_bundle.zip"
+    if not storage.exists(key):
+        return Response({"detail": "Offline bundle not ready"}, status=404)
+
+    file = storage.open(key, mode='rb')
+    response = FileResponse(file, as_attachment=True, filename=f"tour_{tour_id}_offline.zip", content_type="application/zip")
+    return response
 
 @swagger_auto_schema(
     method='get',
@@ -438,7 +476,46 @@ def tour_deep_link(request, pk):
     responses={
         200: openapi.Response(
             description="List of tours with streaming links and waypoint resources",
-            schema=TourSerializer(many=True)
+            examples={
+                'application/json': [
+                    {
+                        "title": "Example Tour",
+                        "subtitle": "Example Subtitle",
+                        "place": "Example Place",
+                        "category": "OUTDOOR",
+                        "description": "Example description",
+                        "user": 1,
+                        "lat": 40.0,
+                        "lon": 15.0,
+                        "default_img": "1/default_image/example.jpg",
+                        "creation_time": "2026-01-01",
+                        "user_name": "username",
+                        "id": 1,
+                        "tot_view": 0,
+                        "l_edited": "2026-01-01",
+                        "rating": 0.0,
+                        "rating_counter": 0,
+                        "default_img_url": "http://example.com/stream_minio_resource/?tour=1&file=default_image",
+                        "deep_link": "http://example.com/tour/1/",
+                        "waypoints_resources": [
+                            {
+                                "id": 1,
+                                "title": "Example Waypoint",
+                                "description": "Example waypoint description",
+                                "location": "40.0, 15.0",
+                                "resources": {
+                                    "readme": "http://example.com/stream_minio_resource/?waypoint=1&file=readme",
+                                    "audio": "http://example.com/stream_minio_resource/?waypoint=1&file=audio",
+                                    "pdf": "http://example.com/stream_minio_resource/?waypoint=1&file=pdf",
+                                    "markdown": "http://example.com/stream_minio_resource/?waypoint=1&file=markdown",
+                                    "video": "http://example.com/stream_minio_resource/?waypoint=1&file=video",
+                                    "links": "http://example.com/stream_minio_resource/?waypoint=1&file=links"
+                                }
+                            }
+                        ]
+                    }
+                ]
+            }
         )
     }
 )
@@ -452,37 +529,133 @@ def tour_informations(request):
     domain = os.getenv("DOMAIN")
     for tour_data in data:
         tour_id = tour_data['id']
-        tour_data['default_img'] = f"{domain}stream_minio_resource/?tour={tour_id}&file=default_image"
-        tour_data['deep_link'] = f"{domain}tour/{tour_id}/"
+        
+        coordinates = tour_data.get('coordinates', '0.0, 0.0')
+        lat, lon = coordinates.split(',')
+        tour_data['lat'] = float(lat.strip())
+        tour_data['lon'] = float(lon.strip())
+        
+        tour_data.pop('coordinates', None)
+        
+        tour_data['default_img_url'] = f"{domain}/stream_minio_resource/?tour={tour_id}&file=default_image"
+        tour_data['deep_link'] = f"{domain}/tour/{tour_id}/"
         
         tour = Tour.objects.get(id=tour_id)
-        waypoints = tour.waypoints.all()
+        if tour.user:
+            tour_data['user_name'] = tour.user.username
+        
+        if tour_data.get('creation_time'):
+            tour_data['creation_time'] = tour_data['creation_time'].split('T')[0]
+        if tour_data.get('last_edited'):
+            tour_data['l_edited'] = tour_data['last_edited'].split('T')[0]
+            tour_data.pop('last_edited', None)
+        
+        waypoints = tour.waypoints.order_by('position', 'id')
         waypoints_data = []
         
         for waypoint in waypoints:
+            wp_coordinates = waypoint.coordinates or '0.0, 0.0'
+            
+            image_urls = [
+                f"{domain}/stream_minio_resource/?waypoint={waypoint.id}&file={quote(img.image.name, safe='/')}"
+                for img in waypoint.images.all()
+                if img.image
+            ]
+            
             waypoint_info = {
                 'id': waypoint.id,
                 'title': waypoint.title,
-                'resources': {}
+                'description': waypoint.description or '',
+                'location': wp_coordinates,
+                'resources': {
+                    'readme': f"{domain}/stream_minio_resource/?waypoint={waypoint.id}&file=readme",
+                    'audio': f"{domain}/stream_minio_resource/?waypoint={waypoint.id}&file=audio",
+                    'pdf': f"{domain}/stream_minio_resource/?waypoint={waypoint.id}&file=pdf",
+                    'markdown': f"{domain}/stream_minio_resource/?waypoint={waypoint.id}&file=markdown",
+                    'video': f"{domain}/stream_minio_resource/?waypoint={waypoint.id}&file=video",
+                    'links': f"{domain}/stream_minio_resource/?waypoint={waypoint.id}&file=links",
+                    'images': image_urls
+                }
             }
-            
-            if waypoint.pdf_item:
-                waypoint_info['resources']['pdf'] = f"{domain}stream_minio_resource/?waypoint={waypoint.id}&file=pdf"
-            if waypoint.readme_item:
-                waypoint_info['resources']['readme'] = f"{domain}stream_minio_resource/?waypoint={waypoint.id}&file=readme"
-            if waypoint.video_item:
-                waypoint_info['resources']['video'] = f"{domain}stream_minio_resource/?waypoint={waypoint.id}&file=video"
-            if waypoint.audio_item:
-                waypoint_info['resources']['audio'] = f"{domain}stream_minio_resource/?waypoint={waypoint.id}&file=audio"
-            if waypoint.links.exists():
-                waypoint_info['resources']['links'] = [link.link for link in waypoint.links.all()]
-            
-            images = waypoint.images.filter(type_of_images=TypeOfImage.ADDITIONAL_IMAGES)
-            if images.exists():
-                waypoint_info['resources']['images'] = [f"{domain}stream_minio_resource/?waypoint={waypoint.id}&file={img.image.name}" for img in images]
             
             waypoints_data.append(waypoint_info)
         
         tour_data['waypoints_resources'] = waypoints_data
     
     return Response(data)
+
+@swagger_auto_schema(
+    method='post',
+    operation_summary="Report a tour",
+    operation_description="Increments the report count of a tour by 1. Requires authentication.",
+    request_body=openapi.Schema(
+        type=openapi.TYPE_OBJECT,
+        required=['tour_id'],
+        properties={
+            'tour_id': openapi.Schema(
+                type=openapi.TYPE_INTEGER,
+                description="ID of the tour to report"
+            )
+        }
+    ),
+    responses={
+        200: openapi.Response(
+            description="Tour reported successfully",
+            examples={
+                "application/json": {
+                    "detail": "Tour reported successfully"
+                }
+            }
+        ),
+        400: openapi.Response(
+            description="Missing or invalid tour_id",
+            examples={
+                "application/json": {
+                    "detail": "tour_id is required"
+                }
+            }
+        ),
+        404: openapi.Response(
+            description="Tour not found",
+            examples={
+                "application/json": {
+                    "detail": "Tour not found"
+                }
+            }
+        ),
+        500: openapi.Response(
+            description="Internal server error",
+            examples={
+                "application/json": {
+                    "detail": "An unexpected error occurred"
+                }
+            }
+        ),
+    }
+)
+@api_view(['POST'])
+@authentication_classes([JWTFastAPIAuthentication])
+@permission_classes([IsAuthenticated])
+def increment_reports(request):
+    tour_id = request.data.get('tour_id')
+
+    if tour_id is None:
+        return Response({"detail": "tour_id is required"}, status=status.HTTP_400_BAD_REQUEST)
+
+    if not isinstance(tour_id, int) or tour_id <= 0:
+        return Response({"detail": "tour_id must be a positive integer"}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        tour = Tour.objects.get(id=tour_id)
+    except Tour.DoesNotExist:
+        return Response({"detail": "Tour not found"}, status=status.HTTP_404_NOT_FOUND)
+    except Exception:
+        return Response({"detail": "An unexpected error occurred"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    try:
+        tour.reports = (tour.reports or 0) + 1
+        tour.save(update_fields=['reports'])
+    except Exception:
+        return Response({"detail": "An unexpected error occurred"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    return Response({"detail": "Tour reported successfully"}, status=status.HTTP_200_OK)

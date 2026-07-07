@@ -1,5 +1,7 @@
 // lib/screens/tour_detail_screen.dart
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
@@ -22,9 +24,12 @@ import 'services/offline_tour_service.dart';
 import "dart:io";
 import "package:path_provider/path_provider.dart";
 import 'package:flutter_map_pmtiles/flutter_map_pmtiles.dart';
-import 'elements/zlib_image.dart'; // Aggiungi questo import
-
-
+import 'elements/zlib_image.dart';
+import 'services/analytics_service.dart';
+import 'package:cached_network_image/cached_network_image.dart';
+import 'consultation_screen.dart';
+import 'utils/responsive.dart';
+import 'utils/platform_page_route.dart';
 
 class TourDetailScreen extends ConsumerStatefulWidget {
   final int tourId;
@@ -44,11 +49,11 @@ class TourDetailScreen extends ConsumerStatefulWidget {
 
 class _TourDetailScreenState extends ConsumerState<TourDetailScreen>
     with TickerProviderStateMixin {
-
   late TourService _tourService;
   late ApiService _apiService;
   late LocalStateService _localStateService;
   late OfflineStorageService _offlineService;
+  late AnalyticsService _analytics;
   Set<int> _scannedWaypoints = {};
 
   Map<int, List<String>> _offlineImagesByWaypoint = {};
@@ -72,17 +77,24 @@ class _TourDetailScreenState extends ConsumerState<TourDetailScreen>
   // Bottom sheet controller for itinerary view
   late DraggableScrollableController _sheetController;
   double _sheetMinSize = 0.15; // Initial height ratio
-  double _sheetMaxSize = 0.4; // Maximum height ratio (This will be adjusted in the Itinerario view)
+  double _sheetMaxSize =
+      0.4; // Maximum height ratio (This will be adjusted in the Itinerario view)
 
   Tour? _tourDetails;
   bool _isLoadingTourDetails = true;
 
   // Define your waypoints with coordinates
   List<Waypoint> _waypoints = [];
+  List<Waypoint> get _realWaypoints => _waypoints.where((wp) => !wp.isPreliminaryInfo).toList();
+  List<Waypoint> get _preliminaryWaypoints => _waypoints.where((wp) => wp.isPreliminaryInfo).toList();
+  bool get _hasMapWaypoints => _realWaypoints.isNotEmpty;
+  
   bool _isLoadingWaypoints = true;
 
   List<Review> _reviews = [];
   bool _isLoadingReviews = true;
+  bool _hasUserAlreadyReviewed = false;
+  bool _isCheckingUserReview = false;
 
   double _userRating = 0.0;
   final TextEditingController _reviewController = TextEditingController();
@@ -97,35 +109,40 @@ class _TourDetailScreenState extends ConsumerState<TourDetailScreen>
   String? _pmtilesPath;
   late Future<PmTilesTileProvider> _futureTileProvider;
 
-
   List<String> _getWaypointImagesFor(Waypoint wp) {
-    return widget.isOffline ? (_offlineImagesByWaypoint[wp.id] ?? []) : wp.images;
+    return widget.isOffline
+        ? (_offlineImagesByWaypoint[wp.id] ?? [])
+        : wp.images;
   }
 
   @override
   void initState() {
     super.initState();
-    print(
+    debugPrint(
       'TOUR initState: tourId=${widget.tourId}, isOffline=${widget.isOffline}',
     );
     try {
       _apiService = ref.read(apiServiceProvider);
-      print('TOUR apiService OK');
+      debugPrint('TOUR apiService OK');
     } catch (e) {
-      print('TOUR apiService ERROR: $e');
+      debugPrint('TOUR apiService ERROR: $e');
     }
     _tourService = ref.read(tourServiceProvider);
     _apiService = ref.read(apiServiceProvider);
     _localStateService = ref.read(localStateServiceProvider);
     _offlineService = ref.read(offlineStorageServiceProvider);
+    _analytics = ref.read(analyticsServiceProvider);
     if (widget.isOffline) {
-      print("OFFLINE TOUR");
+      debugPrint("OFFLINE TOUR");
       _initOfflineMap();
       _loadOfflineData();
-    }else {
-      print("ONLINE TOUR");
+    } else {
+      debugPrint("ONLINE TOUR");
       _loadData();
-      _incrementViewCount();
+      // _incrementViewCount();
+    }
+    if (!widget.isOffline && !widget.isGuest) {
+      _checkUserReviewStatusNonBlocking();
     }
     _checkLocationPermission();
     _loadScannedWaypoints();
@@ -149,24 +166,36 @@ class _TourDetailScreenState extends ConsumerState<TourDetailScreen>
 
   Future<void> _loadData() async {
     // Load all data in parallel
-    await Future.wait([
-      _loadTourDetails(),
-      _loadWaypoints(),
-      _loadReviews(),
-    ]);
+    await Future.wait([_loadTourDetails(), _loadWaypoints(), _loadReviews()]);
+  }
+
+  Future<void> _checkUserReviewStatusNonBlocking() async {
+    setState(() => _isCheckingUserReview = true);
+    try {
+      final hasReviewed = await _tourService.hasUserReviewedTour(widget.tourId);
+      if (!mounted) return;
+      setState(() {
+        _hasUserAlreadyReviewed = hasReviewed;
+        _isCheckingUserReview = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _isCheckingUserReview = false);
+    }
   }
 
   Future<void> _initOfflineMap() async {
     final dir = await getApplicationDocumentsDirectory();
-    final path = '${dir.path}/offline_tours_data/tour_${widget.tourId}/tour_${widget.tourId}.pmtiles';
+    final path =
+        '${dir.path}/offline_tours_data/tour_${widget.tourId}/tour_${widget.tourId}.pmtiles';
     if (await File(path).exists()) {
-      print("PMTiles file found at $path");
+      debugPrint("PMTiles file found at $path");
       setState(() {
         _pmtilesPath = path;
         _futureTileProvider = PmTilesTileProvider.fromSource(_pmtilesPath!);
       });
     } else {
-      print("PMTiles file not found at $path");
+      debugPrint("PMTiles file not found at $path");
     }
   }
 
@@ -176,10 +205,7 @@ class _TourDetailScreenState extends ConsumerState<TourDetailScreen>
         future: _futureTileProvider,
         builder: (context, snapshot) {
           if (snapshot.hasData) {
-            return TileLayer(
-              tileProvider: snapshot.data!,
-              urlTemplate: '',
-            );
+            return TileLayer(tileProvider: snapshot.data!, urlTemplate: '');
           }
           // You might want to show a loader or a fallback here
           // return const SizedBox.shrink();
@@ -195,7 +221,7 @@ class _TourDetailScreenState extends ConsumerState<TourDetailScreen>
 
     return TileLayer(
       urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-      userAgentPackageName: 'com.isislab.xrtourguide',
+      userAgentPackageName: 'com.picaresque.xrtourguide',
       tileProvider: NetworkTileProvider(),
     );
   }
@@ -204,30 +230,41 @@ class _TourDetailScreenState extends ConsumerState<TourDetailScreen>
     if (!widget.isOffline) return;
 
     try {
-      final offlineData = await _offlineService.getOfflineTourData(widget.tourId);
+      final offlineData = await _offlineService.getOfflineTourData(
+        widget.tourId,
+      );
       if (offlineData != null) {
         final appDir = await getApplicationDocumentsDirectory();
-        _offlineTourImagePath = "${appDir.path}/offline_tours_data/tour_${widget.tourId}/default_image.jpg";
+        _offlineTourImagePath =
+            "${appDir.path}/offline_tours_data/tour_${widget.tourId}/default_image.jpg";
 
         final Map<int, List<String>> imagesByWp = {};
         final List wps = (offlineData['waypoints'] as List?) ?? [];
         for (final wp in wps) {
           final id = (wp['id'] as num).toInt();
-          final localImages = (wp['local_images'] as List?)?.cast<String>() ?? <String>[];
+          final localImages =
+              (wp['local_images'] as List?)?.cast<String>() ?? <String>[];
           imagesByWp[id] = localImages;
         }
         final List subTours = (offlineData['sub_tours'] as List?) ?? [];
-        print("SUbtours: ${subTours}");
+        debugPrint("SUbtours: ${subTours}");
         for (final st in subTours) {
           final List subWp = (st['waypoints'] as List?) ?? [];
           for (final wp in subWp) {
             final id = (wp['id'] as num).toInt();
-            final localImages = (wp['local_images'] as List?)?.cast<String>() ?? <String>[];
+            final localImages =
+                (wp['local_images'] as List?)?.cast<String>() ?? <String>[];
             imagesByWp[id] = localImages;
           }
         }
 
-        final List<Waypoint> mainWaypoints = wps.map<Waypoint>((wp) => Waypoint.fromJson(wp as Map<String, dynamic>)).toList();
+        final List<Waypoint> mainWaypoints =
+            wps
+                .map<Waypoint>(
+                  (wp) => Waypoint.fromJson(wp as Map<String, dynamic>),
+                )
+                .toList();
+        mainWaypoints.sort(Waypoint.compareByPosition);
 
         final List<Waypoint> subTourWaypoints = <Waypoint>[];
         for (final st in subTours) {
@@ -235,7 +272,13 @@ class _TourDetailScreenState extends ConsumerState<TourDetailScreen>
           if (subTourInfo == null) continue;
 
           final subWpJson = (st['waypoints'] as List?) ?? [];
-          final subWps = subWpJson.map<Waypoint>((wp) => Waypoint.fromJson(wp as Map<String, dynamic>)).toList();
+          final subWps =
+              subWpJson
+                  .map<Waypoint>(
+                    (wp) => Waypoint.fromJson(wp as Map<String, dynamic>),
+                  )
+                  .toList();
+          subWps.sort(Waypoint.compareByPosition);
 
           final subTourWaypoint = Waypoint(
             id: (subTourInfo['id'] as num).toInt(),
@@ -245,7 +288,8 @@ class _TourDetailScreenState extends ConsumerState<TourDetailScreen>
             latitude: (subTourInfo['lat'] as num?)?.toDouble() ?? 0.0,
             longitude: (subTourInfo['lon'] as num?)?.toDouble() ?? 0.0,
             images: const [], // il contenitore non ha immagini proprie
-            category: (subTourInfo['category'] ?? 'INSIDE') as String,
+            category: (subTourInfo['category'] ?? 'INDOOR') as String,
+            position: (subTourInfo["position"] as num?)?.toInt() ?? 999999,
             subWaypoints: subWps,
           );
           subTourWaypoints.add(subTourWaypoint);
@@ -255,8 +299,13 @@ class _TourDetailScreenState extends ConsumerState<TourDetailScreen>
           setState(() {
             _offlineImagesByWaypoint = imagesByWp;
             _tourDetails = Tour.fromJson(offlineData['tour']);
-            _waypoints = [...mainWaypoints, ...subTourWaypoints];
-            _expandedWaypoints = List.generate(_waypoints.length, (i) => i == 0);
+            final mergedWaypoints = [...mainWaypoints, ...subTourWaypoints]
+              ..sort(Waypoint.compareByPosition);
+            _waypoints = mergedWaypoints;
+            _expandedWaypoints = List.generate(
+              _waypoints.length,
+              (i) => i == 0,
+            );
             _expandedSubWaypoints.clear();
             for (int i = 0; i < _waypoints.length; i++) {
               if (_waypoints[i].subWaypoints != null &&
@@ -271,12 +320,13 @@ class _TourDetailScreenState extends ConsumerState<TourDetailScreen>
 
             _isLoadingTourDetails = false;
             _isLoadingWaypoints = false;
-            _isLoadingReviews = false; // Assuming reviews are not stored offline
+            _isLoadingReviews =
+                false; // Assuming reviews are not stored offline
           });
         }
       }
     } catch (e) {
-      print("Error loading offline data: $e");
+      debugPrint("Error loading offline data: $e");
       if (mounted) {
         setState(() {
           _isLoadingTourDetails = false;
@@ -295,12 +345,18 @@ class _TourDetailScreenState extends ConsumerState<TourDetailScreen>
         color: Colors.grey.shade300,
         borderRadius: BorderRadius.circular(12),
       ),
-      child: Icon(Icons.image_not_supported, color: Colors.grey.shade600, size: 30),
+      child: Icon(
+        Icons.image_not_supported,
+        color: Colors.grey.shade600,
+        size: 30,
+      ),
     );
   }
-  
+
   Future<void> _checkOfflineAvailability() async {
-    final isOffline = await _offlineService.isTourAvailableOffline(widget.tourId);
+    final isOffline = await _offlineService.isTourAvailableOffline(
+      widget.tourId,
+    );
     if (mounted) {
       setState(() {
         _isAvailableOffline = isOffline;
@@ -309,32 +365,47 @@ class _TourDetailScreenState extends ConsumerState<TourDetailScreen>
   }
 
   Future<void> _downloadTourOffline() async {
+    unawaited(
+      _analytics.logEvent(
+        name: 'download_tour_offline',
+        parameters: {'tour_id': widget.tourId},
+      ),
+    );
     setState(() => _isDownloading = true);
 
-    try{
+    try {
       final success = await _offlineService.downloadTourOffline(widget.tourId);
 
-      if(mounted){
+      if (mounted) {
         setState(() {
           _isDownloading = false;
           _isAvailableOffline = success;
         });
 
-        if(success){
+        if (success) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Tour downloaded for offline use'), backgroundColor: Colors.green),
+            SnackBar(
+              content: Text('tour_downloaded_success'.tr()),
+              backgroundColor: Colors.green,
+            ),
           );
         } else {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Failed to download tour'), backgroundColor: Colors.red),
+            SnackBar(
+              content: Text('tour_download_failed'.tr()),
+              backgroundColor: Colors.red,
+            ),
           );
         }
       }
-    } catch(e){
-      if(mounted){
+    } catch (e) {
+      if (mounted) {
         setState(() => _isDownloading = false);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error downloading tour: $e'), backgroundColor: Colors.red),
+          SnackBar(
+            content: Text('tour_download_failed'.tr()),
+            backgroundColor: Colors.red,
+          ),
         );
       }
     }
@@ -343,18 +414,34 @@ class _TourDetailScreenState extends ConsumerState<TourDetailScreen>
   Future<void> _confirmRemoveOfflineTour() async {
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text("remove_offline_tour".tr()),
-        content: Text("confirm_remove_offline_tour".tr()),
-        actions: [
-          TextButton(onPressed: () => Navigator.of(context).pop(false), child: Text("cancel".tr())),
-          TextButton(onPressed: () => Navigator.of(context).pop(true), child: Text("remove".tr(), style: const TextStyle(color: Colors.red))),
-        ],
-      ),
+      builder:
+          (context) => AlertDialog(
+            title: Text("remove_offline_tour".tr()),
+            content: Text("confirm_remove_offline_tour".tr()),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: Text("cancel".tr()),
+              ),
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(true),
+                child: Text(
+                  "remove".tr(),
+                  style: const TextStyle(color: Colors.red),
+                ),
+              ),
+            ],
+          ),
     );
 
     if (confirmed == true) {
       await _removeOfflineTour();
+      unawaited(
+        _analytics.logEvent(
+          name: 'remove_offline_tour',
+          parameters: {'tour_id': widget.tourId},
+        ),
+      );
     }
   }
 
@@ -369,7 +456,11 @@ class _TourDetailScreenState extends ConsumerState<TourDetailScreen>
         });
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(success ? 'Tour removed from offline storage' : 'Failed to remove tour'),
+            content: Text(
+              success
+                  ? 'tour_removed_success'.tr()
+                  : 'tour_removed_failed'.tr(),
+            ),
             backgroundColor: success ? Colors.green : Colors.red,
           ),
         );
@@ -378,7 +469,10 @@ class _TourDetailScreenState extends ConsumerState<TourDetailScreen>
       if (mounted) {
         setState(() => _isDownloading = false);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error removing offline tour: $e'), backgroundColor: Colors.red),
+          SnackBar(
+            content: Text('tour_removed_failed'.tr()),
+            backgroundColor: Colors.red,
+          ),
         );
       }
     }
@@ -386,9 +480,12 @@ class _TourDetailScreenState extends ConsumerState<TourDetailScreen>
 
   Future<void> _incrementViewCount() async {
     try {
-      await _apiService.incrementTourViews(widget.tourId, baseUrl: _apiService.getCurrentBaseUrl());
+      await _apiService.incrementTourViews(
+        widget.tourId,
+        baseUrl: _apiService.getCurrentBaseUrl(),
+      );
     } catch (e) {
-      print('Error incrementing view count: $e');
+      debugPrint('Error incrementing view count: $e');
     }
   }
 
@@ -403,18 +500,18 @@ class _TourDetailScreenState extends ConsumerState<TourDetailScreen>
         });
       }
     } catch (e) {
-      print('Error loading scanned waypoints: $e');
+      debugPrint('Error loading scanned waypoints: $e');
     }
   }
 
-
-  Future<void> _loadTourDetails() async{
+  Future<void> _loadTourDetails() async {
     try {
       final tour = await _tourService.getTourById(widget.tourId);
       if (mounted) {
         setState(() {
           _tourDetails = tour;
           _isLoadingTourDetails = false;
+          debugPrint("STATUS: " + _tourDetails!.status);
         });
       }
     } catch (e) {
@@ -422,12 +519,12 @@ class _TourDetailScreenState extends ConsumerState<TourDetailScreen>
         setState(() {
           _isLoadingTourDetails = false;
         });
-        _showError('Error loading tour details');
+        _showError('error_loading_tour'.tr());
       }
     }
   }
 
-Future<void> _loadWaypoints() async {
+  Future<void> _loadWaypoints() async {
     try {
       final waypoints = await _tourService.getWaypointsByTour(widget.tourId);
       if (mounted) {
@@ -463,7 +560,7 @@ Future<void> _loadWaypoints() async {
           _expandedWaypoints = [];
           _expandedSubWaypoints.clear();
         });
-        _showError('Error loading waypoints');
+        _showError('error_loading_waypoints'.tr());
       }
     }
   }
@@ -486,19 +583,16 @@ Future<void> _loadWaypoints() async {
         setState(() {
           _isLoadingReviews = false;
         });
-        _showError('Error loading reviews');
+        _showError('error_loading_reviews'.tr());
       }
     }
   }
-
 
   void _showError(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(message), backgroundColor: Colors.red),
     );
   }
-
-
 
   @override
   void dispose() {
@@ -513,13 +607,13 @@ Future<void> _loadWaypoints() async {
     if (_permission == LocationPermission.denied) {
       _permission = await Geolocator.requestPermission();
       if (_permission == LocationPermission.denied) {
-        print('Location permissions are denied.');
+        debugPrint('Location permissions are denied.');
         return;
       }
     }
 
     if (_permission == LocationPermission.deniedForever) {
-      print(
+      debugPrint(
         'Location permissions are permanently denied. Please enable them in settings.',
       );
       return;
@@ -538,8 +632,18 @@ Future<void> _loadWaypoints() async {
     });
   }
 
-   // Method to launch map application
+  // Method to launch map application
   Future<void> _launchMapApp(double latitude, double longitude) async {
+    unawaited(
+      _analytics.logEvent(
+        name: 'launch_map_app',
+        parameters: {
+          'latitude': latitude,
+          'longitude': longitude,
+          'source': 'itinerary_view',
+        },
+      ),
+    );
     final String googleMapsUrl =
         'https://www.google.com/maps/dir/?api=1&destination=$latitude,$longitude&travelmode=driving';
     final String appleMapsUrl =
@@ -549,13 +653,13 @@ Future<void> _loadWaypoints() async {
       if (await canLaunchUrl(Uri.parse(appleMapsUrl))) {
         await launchUrl(Uri.parse(appleMapsUrl));
       } else {
-        _showError('Could not launch Apple Maps');
+        _showError('error_launching_maps'.tr());
       }
     } else {
       if (await canLaunchUrl(Uri.parse(googleMapsUrl))) {
         await launchUrl(Uri.parse(googleMapsUrl));
       } else {
-        _showError('Could not launch Google Maps');
+        _showError('error_launching_maps'.tr());
       }
     }
   }
@@ -570,9 +674,9 @@ Future<void> _loadWaypoints() async {
     Waypoint waypoint, {
     bool isItineraryView = false,
   }) {
-    final bool isSelected = _selectedWaypointIndex == index && isItineraryView;
-    final bool isSelectedMappa = _selectedWaypointIndexMappa == index && !isItineraryView;
-
+    final bool isSelected = isItineraryView ? false : _selectedWaypointIndex == index ;
+    final bool isSelectedMappa =
+        _selectedWaypointIndexMappa == index && !isItineraryView;
 
     return Marker(
       point: LatLng(waypoint.latitude, waypoint.longitude),
@@ -580,7 +684,7 @@ Future<void> _loadWaypoints() async {
       height: 60, // Increased size for better tapping
       child: GestureDetector(
         onTap: () {
-          print('Tapped on Waypoint ${index + 1}');
+          debugPrint('Tapped on Waypoint ${index + 1}');
           _centerMap(LatLng(waypoint.latitude, waypoint.longitude));
 
           if (!isItineraryView) {
@@ -630,10 +734,19 @@ Future<void> _loadWaypoints() async {
 
             // Marker container
             Container(
-              width: isSelectedMappa ? 60 : (isSelected ? 52 :(isItineraryView ? 40 : 32)),
-              height: isSelectedMappa ? 60 : (isSelected ? 52 : (isItineraryView ? 40 : 32)),
+              width:
+                  isSelectedMappa
+                      ? 60
+                      : (isSelected ? 52 : (isItineraryView ? 40 : 32)),
+              height:
+                  isSelectedMappa
+                      ? 60
+                      : (isSelected ? 52 : (isItineraryView ? 40 : 32)),
               decoration: BoxDecoration(
-                color: isSelected | isSelectedMappa ? Colors.green.withOpacity(0.5) : AppColors.primary.withOpacity(0.5),
+                color:
+                    isSelected | isSelectedMappa
+                        ? Colors.green.withOpacity(0.5)
+                        : AppColors.primary.withOpacity(0.5),
                 shape: BoxShape.circle,
                 border: Border.all(color: Colors.white, width: 2),
                 boxShadow: [
@@ -646,11 +759,18 @@ Future<void> _loadWaypoints() async {
               ),
               child: Center(
                 child: Text(
-                  '${index + 1}',
+                  isItineraryView ? '${index}' : '${index + 1}',
                   style: TextStyle(
                     color: Colors.white,
                     fontWeight: FontWeight.bold,
-                    fontSize: isSelectedMappa ? 25 : (isSelected ? 22 : (isItineraryView ? 16 : 14)),
+                    fontSize:
+                        isSelectedMappa
+                            ? context.r.sp(25)
+                            : (isSelected
+                                ? context.r.sp(22)
+                                : (isItineraryView
+                                    ? context.r.sp(16)
+                                    : context.r.sp(14))),
                   ),
                 ),
               ),
@@ -689,7 +809,7 @@ Future<void> _loadWaypoints() async {
     final screenHeight = MediaQuery.of(context).size.height;
     final screenWidth = MediaQuery.of(context).size.width;
 
-     if (_isLoadingTourDetails || _isLoadingWaypoints) {
+    if (_isLoadingTourDetails || _isLoadingWaypoints) {
       return Scaffold(
         appBar: AppBar(backgroundColor: Colors.white, toolbarHeight: 0.1),
         body: const Center(child: CircularProgressIndicator()),
@@ -708,7 +828,12 @@ Future<void> _loadWaypoints() async {
             options: MapOptions(
               initialCenter:
                   // _waypoints[0].location, // Start with first waypoint
-                  _currentPosition != null ? LatLng(_currentPosition!.latitude, _currentPosition!.longitude) : LatLng(_waypoints[0].latitude, _waypoints[0].longitude),
+                  _currentPosition != null
+                      ? LatLng(
+                        _currentPosition!.latitude,
+                        _currentPosition!.longitude,
+                      )
+                      : LatLng(_realWaypoints[0].latitude, _realWaypoints[0].longitude),
               initialZoom: 13.0,
               maxZoom: 16.0,
               interactionOptions: const InteractionOptions(
@@ -716,18 +841,11 @@ Future<void> _loadWaypoints() async {
               ),
             ),
             children: [
-              // Base map layer
-              // TileLayer(
-              //   urlTemplate:
-              //       'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-              //   userAgentPackageName: 'com.isislab.xrtourguide',
-              //   tileProvider: NetworkTileProvider()
-              // ),
               _baseMapLayer(),
               // Waypoint markers
               MarkerLayer(
                 markers:
-                    _waypoints.asMap().entries.map((entry) {
+                    _realWaypoints.asMap().entries.map((entry) {
                       int index = entry.key;
                       Waypoint waypoint = entry.value;
                       return _buildWaypointMarker(
@@ -766,7 +884,7 @@ Future<void> _loadWaypoints() async {
 
           // Back button (positioned on top of the map)
           Positioned(
-            top: MediaQuery.of(context).padding.top - 15,
+            top: MediaQuery.of(context).padding.top + context.r.space(8),
             left: 16,
             child: Container(
               width: screenWidth * 0.15,
@@ -791,17 +909,19 @@ Future<void> _loadWaypoints() async {
                 onPressed: () {
                   // Go back to previous screen or tab
                   setState(() {
-                    _selectedTab = 'About'; // Or 'Mappa' depending on desired flow
+                    _selectedTab =
+                        'About'; // Or 'Mappa' depending on desired flow
                   });
                   _mapAnimationController.reverse();
                 },
               ),
             ),
           ),
-          
-          if (widget.isGuest == false)
+
+          if (_tourDetails!.status == "BUILT")
+            // if (widget.isGuest == false)
             Positioned(
-              top: MediaQuery.of(context).padding.top - 15,
+              top: MediaQuery.of(context).padding.top + context.r.space(8),
               right: 16,
               child: Container(
                 width: screenWidth * 0.15,
@@ -811,21 +931,44 @@ Future<void> _loadWaypoints() async {
                   shape: BoxShape.circle,
                 ),
                 child: IconButton(
-                  icon: const Icon(Icons.camera_alt, color: Colors.white, size: 28,),
+                  icon: const Icon(
+                    Icons.camera_alt,
+                    color: Colors.white,
+                    size: 28,
+                  ),
                   onPressed: () {
-                    if (!widget.isOffline){
-                      _apiService.initializeInferenceModule(widget.tourId, baseUrl: _apiService.getCurrentBaseUrl());
+                    if (!widget.isOffline) {
+                      _apiService.initializeInferenceModule(
+                        widget.tourId,
+                        baseUrl: _apiService.getCurrentBaseUrl(),
+                      );
                     }
+                    unawaited(
+                      _analytics.logEvent(
+                        name: 'go_to_camera_screen',
+                        parameters: {
+                          'tour_id': widget.tourId,
+                          "source": "map_screen",
+                        },
+                      ),
+                    );
                     //Initialize the inference module for the tour
                     Navigator.push(
                       context,
-                      MaterialPageRoute(builder: (context) => ARCameraScreen(tourId: widget.tourId, latitude: _tourDetails!.latitude, longitude: _tourDetails!.longitude, isOffline: widget.isOffline)),
+                      platformPageRoute(
+                        builder:
+                            (context) => ARCameraScreen(
+                              tourId: widget.tourId,
+                              latitude: _tourDetails!.latitude,
+                              longitude: _tourDetails!.longitude,
+                              isOffline: widget.isOffline,
+                            ),
+                      ),
                     );
                   },
                 ),
               ),
             ),
-
 
           // Bottom sheet with waypoint info
           DraggableScrollableSheet(
@@ -841,16 +984,12 @@ Future<void> _loadWaypoints() async {
               1.0,
             ], // Snap points including full screen
             builder: (context, scrollController) {
-              final selectedWaypoint =
-                  _waypoints[_selectedWaypointIndexMappa];
-              
+              final selectedWaypoint = _realWaypoints[_selectedWaypointIndexMappa];
 
               return Container(
                 decoration: const BoxDecoration(
                   color: Colors.white,
-                  borderRadius: BorderRadius.vertical(
-                    top: Radius.circular(20),
-                  ),
+                  borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
                 ),
                 child: CustomScrollView(
                   controller: scrollController,
@@ -862,10 +1001,7 @@ Future<void> _loadWaypoints() async {
                           // Handle indicator
                           Center(
                             child: Container(
-                              margin: const EdgeInsets.only(
-                                top: 12,
-                                bottom: 8,
-                              ),
+                              margin: const EdgeInsets.only(top: 12, bottom: 8),
                               width: 40,
                               height: 4,
                               decoration: BoxDecoration(
@@ -883,41 +1019,53 @@ Future<void> _loadWaypoints() async {
                                 // Waypoint image
                                 ClipRRect(
                                   borderRadius: BorderRadius.circular(12),
-                                  child: widget.isOffline
-                                      ? (_getWaypointImagesFor(selectedWaypoint).isNotEmpty
-                                          // ? Image.file(
-                                          //     File(_getWaypointImagesFor(selectedWaypoint)[0]),
-                                          //     width: 80,
-                                          //     height: 80,
-                                          //     fit: BoxFit.cover,
-                                          //     errorBuilder: (context, error, stackTrace) => _offlineImagePlaceholder(),
-                                          //   )
-                                          // : _offlineImagePlaceholder())
-                                          ? ZlibImage(
-                                              filePath: _getWaypointImagesFor(selectedWaypoint)[0],
-                                              width: 80,
-                                              height: 80,
-                                              fit: BoxFit.cover,
-                                              useCache: false,
-                                              errorBuilder: (context, error, stackTrace) => _offlineImagePlaceholder(),
-                                            ) : _offlineImagePlaceholder())
-                                      : (selectedWaypoint.images.isNotEmpty
-                                          // ? Image.network(
-                                          //     "${ApiService.basicUrl}/stream_minio_resource/?waypoint=${selectedWaypoint.id}&file=${selectedWaypoint.images[0]}",
-                                          //     width: 80,
-                                          //     height: 80,
-                                          //     fit: BoxFit.cover,
-                                          //     errorBuilder: (context, error, stackTrace) => _offlineImagePlaceholder(),
-                                          //   )
-                                          ? ZlibImage(
-                                              url: "${ApiService.basicUrl}/stream_minio_resource/?waypoint=${selectedWaypoint.id}&file=${selectedWaypoint.images[0]}",
-                                              width: 80,
-                                              height: 80,
-                                              fit: BoxFit.cover,
-                                              useCache: false,
-                                              errorBuilder: (context, error, stackTrace) => _offlineImagePlaceholder(),
-                                            )
-                                          : _offlineImagePlaceholder()),
+                                  child:
+                                      widget.isOffline
+                                          ? (_getWaypointImagesFor(
+                                                selectedWaypoint,
+                                              ).isNotEmpty
+                                              ? ZlibImage(
+                                                filePath:
+                                                    _getWaypointImagesFor(
+                                                      selectedWaypoint,
+                                                    )[0],
+                                                width: 80,
+                                                height: 80,
+                                                fit: BoxFit.cover,
+                                                useCache: false,
+                                                errorBuilder:
+                                                    (
+                                                      context,
+                                                      error,
+                                                      stackTrace,
+                                                    ) =>
+                                                        _offlineImagePlaceholder(),
+                                              )
+                                              : _offlineImagePlaceholder())
+                                          : (selectedWaypoint.images.isNotEmpty
+                                              ? CachedNetworkImage(
+                                                imageUrl:
+                                                    "${ApiService.basicUrl}/stream_minio_resource/?waypoint=${selectedWaypoint.id}&file=${selectedWaypoint.images[0]}",
+                                                width: 80,
+                                                height: 80,
+                                                fit: BoxFit.cover,
+                                                memCacheWidth: 160,
+                                                maxWidthDiskCache: 320,
+                                                placeholder:
+                                                    (
+                                                      context,
+                                                      url,
+                                                    ) => const Center(
+                                                      child:
+                                                          CircularProgressIndicator(
+                                                            strokeWidth: 2,
+                                                          ),
+                                                    ),
+                                                errorWidget:
+                                                    (context, url, error) =>
+                                                        _offlineImagePlaceholder(),
+                                              )
+                                              : _offlineImagePlaceholder()),
                                 ),
                                 const SizedBox(width: 16),
 
@@ -929,16 +1077,15 @@ Future<void> _loadWaypoints() async {
                                     children: [
                                       Text(
                                         selectedWaypoint.category,
-                                        style: const TextStyle(
-                                          fontSize: 14,
-                                          color:
-                                              AppColors.textSecondary,
+                                        style: TextStyle(
+                                          fontSize: context.r.sp(14),
+                                          color: AppColors.textSecondary,
                                         ),
                                       ),
                                       Text(
                                         selectedWaypoint.title,
-                                        style: const TextStyle(
-                                          fontSize: 18,
+                                        style: TextStyle(
+                                          fontSize: context.r.sp(18),
                                           fontWeight: FontWeight.bold,
                                           color: AppColors.textPrimary,
                                         ),
@@ -946,7 +1093,7 @@ Future<void> _loadWaypoints() async {
                                       Text(
                                         'Tap on markers to navigate',
                                         style: TextStyle(
-                                          fontSize: 12,
+                                          fontSize: context.r.sp(12),
                                           color: Colors.grey.shade600,
                                           fontStyle: FontStyle.italic,
                                         ),
@@ -979,7 +1126,7 @@ Future<void> _loadWaypoints() async {
                             Text(
                               'description'.tr(),
                               style: TextStyle(
-                                fontSize: 18,
+                                fontSize: context.r.sp(18),
                                 fontWeight: FontWeight.bold,
                                 color: AppColors.textPrimary,
                               ),
@@ -987,8 +1134,8 @@ Future<void> _loadWaypoints() async {
                             const SizedBox(height: 8),
                             Text(
                               selectedWaypoint.description,
-                              style: const TextStyle(
-                                fontSize: 16,
+                              style: TextStyle(
+                                fontSize: context.r.sp(16),
                                 height: 1.5,
                                 color: AppColors.textSecondary,
                               ),
@@ -1000,7 +1147,7 @@ Future<void> _loadWaypoints() async {
                             // const Text(
                             //   'Tour Progress',
                             //   style: TextStyle(
-                            //     fontSize: 18,
+                            //     fontSize: context.r.sp(18),
                             //     fontWeight: FontWeight.bold,
                             //     color: AppColors.textPrimary,
                             //   ),
@@ -1009,7 +1156,7 @@ Future<void> _loadWaypoints() async {
                             // Text(
                             //   'Waypoint ${_selectedWaypointIndex + 1} of ${_waypoints.length}',
                             //   style: const TextStyle(
-                            //     fontSize: 14,
+                            //     fontSize: context.r.sp(14),
                             //     color: AppColors.textSecondary,
                             //   ),
                             // ),
@@ -1041,7 +1188,6 @@ Future<void> _loadWaypoints() async {
                             //     ],
                             //   ),
                             // ),
-
                             const SizedBox(height: 24),
 
                             // Photos section
@@ -1049,7 +1195,7 @@ Future<void> _loadWaypoints() async {
                               Text(
                                 'photos'.tr(),
                                 style: TextStyle(
-                                  fontSize: 18,
+                                  fontSize: context.r.sp(18),
                                   fontWeight: FontWeight.bold,
                                   color: AppColors.textPrimary,
                                 ),
@@ -1059,60 +1205,64 @@ Future<void> _loadWaypoints() async {
                                 height: 200,
                                 child: ListView.builder(
                                   scrollDirection: Axis.horizontal,
-                                  itemCount:
-                                      selectedWaypoint.images.length,
+                                  itemCount: selectedWaypoint.images.length,
                                   itemBuilder: (context, index) {
                                     return Padding(
-                                      padding: const EdgeInsets.only(
-                                        right: 12,
-                                      ),
-                                      // child: ClipRRect(
-                                      //   borderRadius:
-                                      //       BorderRadius.circular(12),
-                                      //   child: Image.network(
-                                      //     "${ApiService.basicUrl}/stream_minio_resource/?waypoint=${selectedWaypoint.id}&file=${selectedWaypoint.images[index]}",
-                                      //     width: 250,
-                                      //     height: 200,
-                                      //     fit: BoxFit.cover,
-                                      //   ),
-                                      // ),
+                                      padding: const EdgeInsets.only(right: 12),
                                       child: ClipRRect(
                                         borderRadius: BorderRadius.circular(12),
-                                        child: widget.isOffline ?
-                                        (_getWaypointImagesFor(selectedWaypoint).isNotEmpty
-                                            // ? Image.file(
-                                            //     File(_getWaypointImagesFor(selectedWaypoint)[0]),
-                                            //     width: 80,
-                                            //     height: 80,
-                                            //     fit: BoxFit.cover,
-                                            //     errorBuilder: (context, error, stackTrace) => _offlineImagePlaceholder(),
-                                            //   )
-                                            // : _offlineImagePlaceholder())
-                                            ? ZlibImage(
-                                                filePath: _getWaypointImagesFor(selectedWaypoint)[index],
-                                                width: 250,
-                                                height: 200,
-                                                fit: BoxFit.cover,
-                                                useCache: false,
-                                                errorBuilder: (context, error, stackTrace) => _offlineImagePlaceholder(),
-                                            ) : _offlineImagePlaceholder())
-                                        : (selectedWaypoint.images.isNotEmpty
-                                            // ? Image.network(
-                                            //     "${ApiService.basicUrl}/stream_minio_resource/?waypoint=${selectedWaypoint.id}&file=${selectedWaypoint.images[index]}",
-                                            //     width: 80,
-                                            //     height: 80,
-                                            //     fit: BoxFit.cover,
-                                            //     errorBuilder: (context, error, stackTrace) => _offlineImagePlaceholder(),
-                                            //   )
-                                            ? ZlibImage(
-                                                url: "${ApiService.basicUrl}/stream_minio_resource/?waypoint=${selectedWaypoint.id}&file=${selectedWaypoint.images[index]}",
-                                                width: 250,
-                                                height: 200,
-                                                fit: BoxFit.cover,
-                                                useCache: false,
-                                                errorBuilder: (context, error, stackTrace) => _offlineImagePlaceholder(),
-                                            )
-                                            : _offlineImagePlaceholder()),
+                                        child:
+                                            widget.isOffline
+                                                ? (_getWaypointImagesFor(
+                                                      selectedWaypoint,
+                                                    ).isNotEmpty
+                                                    ? ZlibImage(
+                                                      filePath:
+                                                          _getWaypointImagesFor(
+                                                            selectedWaypoint,
+                                                          )[index],
+                                                      width: 250,
+                                                      height: 200,
+                                                      fit: BoxFit.cover,
+                                                      useCache: false,
+                                                      errorBuilder:
+                                                          (
+                                                            context,
+                                                            error,
+                                                            stackTrace,
+                                                          ) =>
+                                                              _offlineImagePlaceholder(),
+                                                    )
+                                                    : _offlineImagePlaceholder())
+                                                : (selectedWaypoint
+                                                        .images
+                                                        .isNotEmpty
+                                                    ? CachedNetworkImage(
+                                                      imageUrl:
+                                                          "${ApiService.basicUrl}/stream_minio_resource/?waypoint=${selectedWaypoint.id}&file=${selectedWaypoint.images[index]}",
+                                                      fit: BoxFit.cover,
+                                                      memCacheWidth: 1200,
+                                                      maxWidthDiskCache: 1600,
+                                                      placeholder:
+                                                          (
+                                                            context,
+                                                            url,
+                                                          ) => const Center(
+                                                            child:
+                                                                CircularProgressIndicator(
+                                                                  strokeWidth:
+                                                                      2,
+                                                                ),
+                                                          ),
+                                                      errorWidget:
+                                                          (
+                                                            context,
+                                                            url,
+                                                            error,
+                                                          ) =>
+                                                              _offlineImagePlaceholder(),
+                                                    )
+                                                    : _offlineImagePlaceholder()),
                                       ),
                                     );
                                   },
@@ -1125,7 +1275,10 @@ Future<void> _loadWaypoints() async {
                               width: double.infinity,
                               child: ElevatedButton.icon(
                                 onPressed:
-                                    () => _launchMapApp(selectedWaypoint.latitude, selectedWaypoint.longitude),
+                                    () => _launchMapApp(
+                                      selectedWaypoint.latitude,
+                                      selectedWaypoint.longitude,
+                                    ),
                                 icon: const Icon(Icons.navigation),
                                 label: Text('navigate_to_waypoint'.tr()),
                                 style: ElevatedButton.styleFrom(
@@ -1199,21 +1352,22 @@ Future<void> _loadWaypoints() async {
                             // ),
 
                             // Additional information
-                                  ],
-                                ),
-                              ),
-                            ),
                           ],
                         ),
-                      );
-                    },
-                  )
-                ],
+                      ),
+                    ),
+                  ],
+                ),
               );
+            },
+          ),
+        ],
+      );
     } else {
       // About and Mappa views: Standard scrollable content
       mainContent = SingleChildScrollView(
-        physics: const AlwaysScrollableScrollPhysics(), // Enable scrolling for these tabs
+        physics:
+            const AlwaysScrollableScrollPhysics(), // Enable scrolling for these tabs
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -1222,7 +1376,7 @@ Future<void> _loadWaypoints() async {
               children: [
                 // Image gallery
                 SizedBox(
-                  height: 300,
+                  height: context.r.heroImageHeight(),
                   width: double.infinity,
                   child: PageView.builder(
                     controller: _pageController,
@@ -1238,31 +1392,30 @@ Future<void> _loadWaypoints() async {
                           _offlineTourImagePath != null &&
                           File(_offlineTourImagePath!).existsSync()) {
                         // Modalità Offline: carica l'immagine dal file locale
-                        // return Image.file(
-                        //   File(_offlineTourImagePath!),
-                        //   fit: BoxFit.cover,
-                        //   errorBuilder: (context, error, stackTrace) =>
-                        //       _offlineImagePlaceholder(),
-                        // );
                         return ZlibImage(
                           filePath: _offlineTourImagePath!,
                           fit: BoxFit.cover,
-                          errorBuilder: (context, error, stackTrace) =>
-                              _offlineImagePlaceholder(),
+                          errorBuilder:
+                              (context, error, stackTrace) =>
+                                  _offlineImagePlaceholder(),
                         );
                       } else if (_tourDetails != null) {
                         // Modalità Online: carica l'immagine dalla rete
-                        // return Image.network(
-                        //   "${ApiService.basicUrl}/stream_minio_resource/?tour=${_tourDetails!.id}",
-                        //   fit: BoxFit.cover,
-                        //   errorBuilder: (context, error, stackTrace) =>
-                        //       _offlineImagePlaceholder(),
-                        // );
-                        return ZlibImage(
-                          url: "${ApiService.basicUrl}/stream_minio_resource/?tour=${_tourDetails!.id}",
+                        return CachedNetworkImage(
+                          imageUrl:
+                              "${ApiService.basicUrl}/stream_minio_resource/?tour=${_tourDetails!.id}",
                           fit: BoxFit.cover,
-                          errorBuilder: (context, error, stackTrace) =>
-                              _offlineImagePlaceholder(),
+                          memCacheWidth: 1200,
+                          maxWidthDiskCache: 1600,
+                          placeholder:
+                              (context, url) => const Center(
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              ),
+                          errorWidget:
+                              (context, url, error) =>
+                                  _offlineImagePlaceholder(),
                         );
                       }
                       // Fallback nel caso in cui non ci sia nessuna immagine
@@ -1279,7 +1432,7 @@ Future<void> _loadWaypoints() async {
 
                 // Back button
                 Positioned(
-                  top: MediaQuery.of(context).padding.top - 15,
+                  top: MediaQuery.of(context).padding.top + context.r.space(8),
                   left: 16,
                   child: Container(
                     width: screenWidth * 0.15,
@@ -1299,7 +1452,7 @@ Future<void> _loadWaypoints() async {
                       icon: const Icon(
                         Icons.arrow_back,
                         color: AppColors.textPrimary,
-                        size: 28
+                        size: 28,
                       ),
                       onPressed: () => Navigator.pop(context),
                     ),
@@ -1320,11 +1473,10 @@ Future<void> _loadWaypoints() async {
                       borderRadius: BorderRadius.circular(16),
                     ),
                     child: Text(
-                      // '${_currentImageIndex + 1}/${_tourDetails?.images.length}',
                       '${_currentImageIndex + 1}/1',
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: Colors.white,
-                        fontSize: 12,
+                        fontSize: context.r.sp(12),
                         fontWeight: FontWeight.bold,
                       ),
                     ),
@@ -1348,28 +1500,44 @@ Future<void> _loadWaypoints() async {
                 children: [
                   Row(
                     children: [
-                      Text(
-                        "created_by".tr(namedArgs: {'creator': _tourDetails?.creator ?? ''}),
-                        style: const TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w500,
-                          color: AppColors.textSecondary,
+                      Expanded(
+                        child: Text(
+                          "created_by".tr(
+                            namedArgs: {'creator': _tourDetails?.creator ?? ''},
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: context.r.sp(12),
+                            fontWeight: FontWeight.w500,
+                            color: AppColors.textSecondary,
+                          ),
                         ),
                       ),
-                      const Spacer(),
-                      Text(
-                        "last_edited_by".tr(namedArgs: {'date': _tourDetails?.lastEdited ?? ''}),
-                        style: const TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w500,
-                          color: AppColors.textSecondary,
+                      // const Spacer(),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          "last_edited_by".tr(
+                            namedArgs: {'date': _tourDetails?.lastEdited ?? ''},
+                          ),
+                          textAlign: TextAlign.end,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: context.r.sp(12),
+                            fontWeight: FontWeight.w500,
+                            color: AppColors.textSecondary,
+                          ),
                         ),
                       ),
                     ],
                   ),
 
                   Row(
-                    crossAxisAlignment: CrossAxisAlignment.start, // Ensures items align at the top
+                    crossAxisAlignment:
+                        CrossAxisAlignment
+                            .start, // Ensures items align at the top
                     children: [
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1400,8 +1568,8 @@ Future<void> _loadWaypoints() async {
                               const SizedBox(width: 8),
                               Text(
                                 '${_tourDetails!.rating.toStringAsFixed(1).toString()} (${_tourDetails!.reviewCount.toString()})',
-                                style: const TextStyle(
-                                  fontSize: 14,
+                                style: TextStyle(
+                                  fontSize: context.r.sp(14),
                                   fontWeight: FontWeight.bold,
                                   color: AppColors.textSecondary,
                                 ),
@@ -1415,21 +1583,23 @@ Future<void> _loadWaypoints() async {
                               ),
                               Text(
                                 _tourDetails!.totViews.toString(),
-                                style: const TextStyle(
-                                  fontSize: 14,
+                                style: TextStyle(
+                                  fontSize: context.r.sp(14),
                                   fontWeight: FontWeight.bold,
                                   color: AppColors.textSecondary,
                                 ),
-                              )
+                              ),
                             ],
                           ),
                           // const SizedBox(height: 8),
                           Row(
-                            children: [ 
+                            children: [
                               Text(
                                 _tourDetails!.title,
-                                style: const TextStyle(
-                                  fontSize: 24,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: context.r.sp(24),
                                   fontWeight: FontWeight.bold,
                                   color: AppColors.textPrimary,
                                 ),
@@ -1447,8 +1617,8 @@ Future<void> _loadWaypoints() async {
                               const SizedBox(width: 4),
                               Text(
                                 _tourDetails!.location,
-                                style: const TextStyle(
-                                  fontSize: 14,
+                                style: TextStyle(
+                                  fontSize: context.r.sp(14),
                                   color: AppColors.textSecondary,
                                 ),
                               ),
@@ -1458,23 +1628,42 @@ Future<void> _loadWaypoints() async {
                       ),
 
                       const Spacer(),
-
-                      if (widget.isGuest == false)
+                      if (_tourDetails?.status == "BUILT")
+                        // if (widget.isGuest == false) //Debug
                         Padding(
                           padding: const EdgeInsets.only(top: 20.0),
                           child: Center(
                             child: ElevatedButton(
                               onPressed: () {
                                 if (!widget.isOffline) {
-                                  _apiService.initializeInferenceModule(_tourDetails!.id, baseUrl: _apiService.getCurrentBaseUrl());
+                                  _apiService.initializeInferenceModule(
+                                    _tourDetails!.id,
+                                    baseUrl: _apiService.getCurrentBaseUrl(),
+                                  );
                                 }
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (context) => ARCameraScreen(tourId: widget.tourId, latitude: _tourDetails!.latitude, longitude: _tourDetails!.longitude, isOffline: widget.isOffline),
+
+                                unawaited(
+                                  _analytics.logEvent(
+                                    name: "go_to_camera_screen",
+                                    parameters: {
+                                      "tour_id": widget.tourId,
+                                      "source": "about_screen",
+                                    },
                                   ),
                                 );
-                                print('Activate AR Guide');
+
+                                Navigator.push(
+                                  context,
+                                  platformPageRoute(
+                                    builder:
+                                        (context) => ARCameraScreen(
+                                          tourId: widget.tourId,
+                                          latitude: _tourDetails!.latitude,
+                                          longitude: _tourDetails!.longitude,
+                                          isOffline: widget.isOffline,
+                                        ),
+                                  ),
+                                );
                               },
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: AppColors.primary,
@@ -1503,7 +1692,8 @@ Future<void> _loadWaypoints() async {
             ),
 
             // Navigation tabs (Conditionally shown here)
-            Padding( // Tabs are always inside the SingleChildScrollView for About/Mappa
+            Padding(
+              // Tabs are always inside the SingleChildScrollView for About/Mappa
               padding: const EdgeInsets.symmetric(horizontal: 15.0),
               child: Row(
                 children: [
@@ -1529,7 +1719,9 @@ Future<void> _loadWaypoints() async {
                     },
                   ),
                   SizedBox(width: 10),
-                  if (_tourDetails != null && _tourDetails!.category != "INSIDE" && _tourDetails!.category != "Cibo")
+                  if (_tourDetails != null &&
+                      _tourDetails!.category != "INDOOR" &&
+                      _tourDetails!.category != "GUIDE")
                     _buildNavTab(
                       icon: Icons.map_outlined,
                       label: 'map_tab'.tr(),
@@ -1575,7 +1767,7 @@ Future<void> _loadWaypoints() async {
                       Text(
                         'tour_highlights'.tr(),
                         style: TextStyle(
-                          fontSize: 18,
+                          fontSize: context.r.sp(18),
                           fontWeight: FontWeight.bold,
                           color: AppColors.textPrimary,
                         ),
@@ -1583,8 +1775,8 @@ Future<void> _loadWaypoints() async {
                       const SizedBox(height: 8),
                       Text(
                         _tourDetails!.description,
-                        style: const TextStyle(
-                          fontSize: 14,
+                        style: TextStyle(
+                          fontSize: context.r.sp(14),
                           color: AppColors.textSecondary,
                           height: 1.5,
                         ),
@@ -1599,7 +1791,7 @@ Future<void> _loadWaypoints() async {
                   padding: const EdgeInsets.symmetric(horizontal: 16.0),
                   child: _buildOfflineSection(),
                 ),
-              const SizedBox(height:24),
+              const SizedBox(height: 24),
               // Verified reviews section
               if (!widget.isOffline)
                 Padding(
@@ -1612,7 +1804,7 @@ Future<void> _loadWaypoints() async {
                           Text(
                             'verified_reviews'.tr(),
                             style: TextStyle(
-                              fontSize: 23,
+                              fontSize: context.r.sp(23),
                               fontWeight: FontWeight.bold,
                               color: AppColors.textPrimary,
                             ),
@@ -1620,22 +1812,25 @@ Future<void> _loadWaypoints() async {
                           const SizedBox(width: 8),
                           Text(
                             '(${_tourDetails!.reviewCount})',
-                            style: const TextStyle(
-                              fontSize: 16,
+                            style: TextStyle(
+                              fontSize: context.r.sp(16),
                               color: AppColors.textSecondary,
                             ),
                           ),
                           const Spacer(),
-                          IconButton(
-                            onPressed: () {
-                              _showLeaveReviewSheet(_tourDetails!.id);
-                            },
-                            icon: Icon(
-                              Icons.add_circle,
-                              color: AppColors.primary,
-                              size: 60,
+                          if (!widget.isGuest &&
+                              !_hasUserAlreadyReviewed &&
+                              !_isCheckingUserReview)
+                            IconButton(
+                              onPressed: () {
+                                _showLeaveReviewSheet(_tourDetails!.id);
+                              },
+                              icon: Icon(
+                                Icons.add_circle,
+                                color: AppColors.primary,
+                                size: 60,
                               ),
-                            )
+                            ),
                         ],
                       ),
                       // const SizedBox(height: 4),
@@ -1644,8 +1839,8 @@ Future<void> _loadWaypoints() async {
                         children: [
                           Text(
                             _tourDetails!.rating.toStringAsFixed(1).toString(),
-                            style: const TextStyle(
-                              fontSize: 48,
+                            style: TextStyle(
+                              fontSize: context.r.sp(48),
                               fontWeight: FontWeight.bold,
                               color: AppColors.textPrimary,
                             ),
@@ -1686,9 +1881,13 @@ Future<void> _loadWaypoints() async {
                                   ],
                                 ),
                                 Text(
-                                  'based_on_reviews'.tr(namedArgs: {'count': '${_tourDetails!.reviewCount}'}),
-                                  style: const TextStyle(
-                                    fontSize: 14,
+                                  'based_on_reviews'.tr(
+                                    namedArgs: {
+                                      'count': '${_tourDetails!.reviewCount}',
+                                    },
+                                  ),
+                                  style: TextStyle(
+                                    fontSize: context.r.sp(14),
                                     color: AppColors.textSecondary,
                                   ),
                                 ),
@@ -1715,36 +1914,31 @@ Future<void> _loadWaypoints() async {
                             );
                           },
                         ),
-                        const SizedBox(height: 16),
-                      //  ...[
-                      //   _buildReviewItem(
-                      //     name: _reviews[0].user,
-                      //     date: _reviews[0].date,
-                      //     rating: _reviews[0].rating,
-                      //     comment: _reviews[0].comment,
-                      //   ),
-                      //   const SizedBox(height: 16),
-                      //   _buildReviewItem(
-                      //     name: _reviews[1].user,
-                      //     date: _reviews[1].date,
-                      //     rating: _reviews[1].rating,
-                      //     comment: _reviews[1].comment,
-                      //   ),
-                      //   const SizedBox(height: 16),
-                      // ],
+                      const SizedBox(height: 16),
                       SizedBox(
                         width: double.infinity,
                         child: OutlinedButton(
                           onPressed: () {
+                            unawaited(
+                              _analytics.logEvent(
+                                name: 'view_all_reviews',
+                                parameters: {
+                                  'tour_id': widget.tourId,
+                                  "source": "about_screen",
+                                },
+                              ),
+                            );
+
                             Navigator.push(
                               context,
-                              MaterialPageRoute(
-                                builder: (context) => ReviewListScreen(
-                                  tourName: _tourDetails!.title,
-                                  tourId: widget.tourId,
-                                  isTour: true,
-                                  reviewCount: _tourDetails!.reviewCount,
-                                ),
+                              platformPageRoute(
+                                builder:
+                                    (context) => ReviewListScreen(
+                                      tourName: _tourDetails!.title,
+                                      tourId: widget.tourId,
+                                      isTour: true,
+                                      reviewCount: _tourDetails!.reviewCount,
+                                    ),
                               ),
                             );
                           },
@@ -1755,13 +1949,13 @@ Future<void> _loadWaypoints() async {
                             ),
                             padding: const EdgeInsets.symmetric(vertical: 12),
                           ),
-                          child: const Row(
+                          child: Row(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
                               Text(
                                 'More',
                                 style: TextStyle(
-                                  fontSize: 16,
+                                  fontSize: context.r.sp(16),
                                   fontWeight: FontWeight.bold,
                                   color: AppColors.primary,
                                 ),
@@ -1776,11 +1970,67 @@ Future<void> _loadWaypoints() async {
                           ),
                         ),
                       ),
+                      const SizedBox(height: 12),
+
+                      // Pulsante Report Tour (outline rosso con icona danger)
+                      SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton.icon(
+                          onPressed: () async {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text('report_sent'.tr()),
+                                backgroundColor: Colors.red,
+                              ),
+                            );
+
+                            try {
+                              await _apiService.sendReport(
+                                widget.tourId,
+                                baseUrl: _apiService.getCurrentBaseUrl(),
+                              );
+                              unawaited(
+                                _analytics.logEvent(
+                                  name: "report_tour",
+                                  parameters: {
+                                    "tour_id": widget.tourId,
+                                    "source": "about_screen",
+                                  },
+                                ),
+                              );
+                            } catch (e) {
+                              if (mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text('report_failed'.tr()),
+                                    backgroundColor: Colors.red,
+                                  ),
+                                );
+                              }
+                            }
+                          },
+                          icon: const Icon(Icons.report, color: Colors.red),
+                          label: Text(
+                            'report_tour'.tr(),
+                            style: const TextStyle(color: Colors.red),
+                          ),
+                          style: OutlinedButton.styleFrom(
+                            side: const BorderSide(color: Colors.red),
+                            foregroundColor: Colors.red,
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                          ),
+                        ),
+                      ),
                     ],
                   ),
                 ),
             ] else if (_selectedTab == 'Itinerario') ...[
-              if (_tourDetails != null && _tourDetails!.category != "INSIDE" && _tourDetails!.category != "Cibo")
+              if (_tourDetails != null &&
+                  _tourDetails!.category != "INDOOR" &&
+                  _tourDetails!.category != "GUIDE")
                 // Interactive Map view using flutter_map
                 Padding(
                   padding: const EdgeInsets.all(16.0),
@@ -1801,8 +2051,6 @@ Future<void> _loadWaypoints() async {
                       child: FlutterMap(
                         mapController: _mapController,
                         options: MapOptions(
-                          // initialCenter: LatLng(_waypoints[0].latitude, _waypoints[0].longitude),
-                          // initialZoom: 13.0,
                           initialCameraFit: _getInitialCameraFit(),
                           maxZoom: 16.0,
                           interactionOptions: const InteractionOptions(
@@ -1810,13 +2058,6 @@ Future<void> _loadWaypoints() async {
                           ),
                         ),
                         children: [
-                          // Base map layer
-                          // TileLayer(
-                          //   urlTemplate:
-                          //       'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                          //   userAgentPackageName: 'com.isislab.xrtourguide',
-                          //   tileProvider: NetworkTileProvider()
-                          // ),
                           _baseMapLayer(),
 
                           // Current location marker
@@ -1864,55 +2105,38 @@ Future<void> _loadWaypoints() async {
                   ),
                 ),
 
-              // Waypoints list
-              // ..._waypoints.asMap().entries.map((entry) {
-              //   int index = entry.key;
-              //   Waypoint waypoint = entry.value;
-              //   return _buildWaypointItem(
-              //     waypointIndex: waypoint.id,
-              //     index: index,
-              //     title: waypoint.title,
-              //     subtitle: waypoint.subtitle,
-              //     description: waypoint.description,
-              //     images: waypoint.images,
-              //     tourCategory: _tourDetails!.category,
-              //     latitude: waypoint.latitude,
-              //     longitude: waypoint.longitude,
-              //     subWaypoints: waypoint.subWaypoints,
-              //   );
-              // }).toList(),
-
               if (_waypoints.isNotEmpty) ...[
-              ..._waypoints.asMap().entries.expand((entry) {
-                int index = entry.key;
-                Waypoint waypoint = entry.value;
+                ..._waypoints.asMap().entries.expand((entry) {
+                  int index = entry.key;
+                  Waypoint waypoint = entry.value;
 
-                List<Widget> waypointWidgets = [];
+                  List<Widget> waypointWidgets = [];
 
-                // Aggiungi il waypoint principale
-                waypointWidgets.add(
-                  _buildWaypointItem(
-                    waypointIndex: waypoint.id,
-                    index: index,
-                    title: waypoint.title,
-                    subtitle: waypoint.subtitle,
-                    description: waypoint.description,
-                    images: waypoint.images,
-                    tourCategory: _tourDetails?.category ?? 'MIXED',
-                    latitude: waypoint.latitude,
-                    longitude: waypoint.longitude,
-                    subWaypoints: waypoint.subWaypoints,
-                    isSubWaypoint: false,
-                  ),
-                );
+                  // Aggiungi il waypoint principale
+                  waypointWidgets.add(
+                    _buildWaypointItem(
+                      waypointIndex: waypoint.id,
+                      index: index,
+                      title: waypoint.title,
+                      subtitle: waypoint.subtitle,
+                      description: waypoint.description,
+                      images: waypoint.images,
+                      tourCategory: _tourDetails?.category ?? 'MIXED',
+                      latitude: waypoint.latitude,
+                      longitude: waypoint.longitude,
+                      isPreliminaryInfo: waypoint.isPreliminaryInfo,
+                      subWaypoints: waypoint.subWaypoints,
+                      isSubWaypoint: false,
+                    ),
+                  );
 
-                return waypointWidgets;
-              }).toList(),
-            ] else
-              const Padding(
-                padding: EdgeInsets.all(16.0),
-                child: Text('No waypoints available'),
-              ),
+                  return waypointWidgets;
+                }).toList(),
+              ] else
+                const Padding(
+                  padding: EdgeInsets.all(16.0),
+                  child: Text('No waypoints available'),
+                ),
             ],
 
             // Add space at the bottom for non-Itinerario tabs
@@ -1944,7 +2168,9 @@ Future<void> _loadWaypoints() async {
         child: Container(
           padding: const EdgeInsets.symmetric(vertical: 12),
           decoration: BoxDecoration(
-            color: buttonColor ?? (isSelected ? AppColors.primary : Colors.transparent),
+            color:
+                buttonColor ??
+                (isSelected ? AppColors.primary : Colors.transparent),
             // color: isSelected ? AppColors.primary : Colors.transparent,
             borderRadius: BorderRadius.circular(24),
           ),
@@ -1959,15 +2185,25 @@ Future<void> _loadWaypoints() async {
                         ? Colors.black
                         : (isSelected ? Colors.black : AppColors.textSecondary),
               ),
-              const SizedBox(width: 8),
-                Text(
-                label,
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                  color: buttonColor != null
-                    ? Colors.black
-                    : (isSelected ? Colors.black : AppColors.textSecondary),
+              const SizedBox(width: 6),
+              Flexible(
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  softWrap: false,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: context.r.sp(14),
+                    fontWeight:
+                        isSelected ? FontWeight.bold : FontWeight.normal,
+                    color:
+                        buttonColor != null
+                            ? Colors.black
+                            : (isSelected
+                                ? Colors.black
+                                : AppColors.textSecondary),
+                  ),
                 ),
               ),
             ],
@@ -1977,37 +2213,36 @@ Future<void> _loadWaypoints() async {
     );
   }
 
-CameraFit _getInitialCameraFit() {
-  List<LatLng> pointsForBounds = _waypoints
-      .map((waypoint) => LatLng(waypoint.latitude, waypoint.longitude))
-      .toList();
+  CameraFit _getInitialCameraFit() {
+    List<LatLng> pointsForBounds =
+        _realWaypoints
+            .map((waypoint) => LatLng(waypoint.latitude, waypoint.longitude))
+            .toList();
 
-  if (_currentPosition != null) {
-    pointsForBounds.add(
-      LatLng(_currentPosition!.latitude, _currentPosition!.longitude),
+    if (_currentPosition != null) {
+      pointsForBounds.add(
+        LatLng(_currentPosition!.latitude, _currentPosition!.longitude),
+      );
+    }
+
+    if (pointsForBounds.isEmpty) {
+      if (_tourDetails != null) {
+        if (_currentPosition == null) {
+          pointsForBounds.add(
+            LatLng(_tourDetails!.latitude, _tourDetails!.longitude),
+          );
+        }
+        return CameraFit.coordinates(coordinates: pointsForBounds);
+      }
+    }
+
+    return CameraFit.bounds(
+      bounds: LatLngBounds.fromPoints(pointsForBounds),
+      padding: const EdgeInsets.all(50.0),
     );
   }
 
-  if (pointsForBounds.isEmpty) {
-    if (_tourDetails != null) {
-      if (_currentPosition == null){
-        pointsForBounds.add(
-          LatLng(_tourDetails!.latitude, _tourDetails!.longitude),
-        );
-      }
-      return CameraFit.coordinates(
-        coordinates: pointsForBounds,
-      );
-    }
-  }
-
-  return CameraFit.bounds(
-    bounds: LatLngBounds.fromPoints(pointsForBounds),
-    padding: const EdgeInsets.all(50.0),
-  );
-}
-
-Widget _buildWaypointItem({
+  Widget _buildWaypointItem({
     required int waypointIndex,
     required int index,
     required String title,
@@ -2017,12 +2252,12 @@ Widget _buildWaypointItem({
     required String tourCategory,
     required double latitude,
     required double longitude,
+    required bool isPreliminaryInfo,
     List<Waypoint>? subWaypoints,
     int? parentIndex,
     bool isSubWaypoint = false,
   }) {
-
-    final bool isScanned = _scannedWaypoints.contains(waypointIndex);
+    final bool isScanned = !isPreliminaryInfo && _scannedWaypoints.contains(waypointIndex);
 
     // Determina se questo item è espanso
     bool isExpanded;
@@ -2041,20 +2276,23 @@ Widget _buildWaypointItem({
         children: [
           // Waypoint header
           Stack(
-            children: [ 
+            children: [
               Container(
                 margin: EdgeInsets.symmetric(
                   horizontal:
-                      isSubWaypoint ? 32.0 : 16.0, // Indentazione per sub-waypoints
+                      isSubWaypoint
+                          ? 32.0
+                          : 16.0, // Indentazione per sub-waypoints
                   vertical: 4.0,
                 ),
                 decoration: BoxDecoration(
-                  color: isSubWaypoint ? Colors.grey.shade50 : Colors.white,
+                  color: isPreliminaryInfo ? AppColors.primary.withOpacity(0.06) : (isSubWaypoint ? Colors.grey.shade50 : Colors.white),
                   borderRadius: BorderRadius.circular(12),
-                  border:
-                      isSubWaypoint
+                  border: isPreliminaryInfo 
+                    ? Border.all(color: AppColors.primary.withOpacity(0.25)) :
+                      (isSubWaypoint
                           ? Border.all(color: Colors.grey.shade200)
-                          : null,
+                          : null),
                   boxShadow:
                       isSubWaypoint
                           ? []
@@ -2090,7 +2328,11 @@ Widget _buildWaypointItem({
                         } else {
                           // Logica per waypoints principali: chiudi tutti gli altri waypoints principali
                           if (index >= 0 && index < _expandedWaypoints.length) {
-                            for (int i = 0; i < _expandedWaypoints.length; i++) {
+                            for (
+                              int i = 0;
+                              i < _expandedWaypoints.length;
+                              i++
+                            ) {
                               if (i != index) {
                                 _expandedWaypoints[i] = false;
                                 // Chiudi anche tutti i sub-waypoints quando si chiude un waypoint principale
@@ -2105,14 +2347,15 @@ Widget _buildWaypointItem({
                                 }
                               }
                             }
-                            _expandedWaypoints[index] = !_expandedWaypoints[index];
+                            _expandedWaypoints[index] =
+                                !_expandedWaypoints[index];
                             _selectedWaypointIndex = index;
-              
+
                             // Centra la mappa SOLO per waypoints principali
-                            if (index < _waypoints.length &&
+                            if (!isPreliminaryInfo && index < _waypoints.length &&
                                 _selectedTab == 'Itinerario' &&
-                                (tourCategory != "INSIDE" &&
-                                    tourCategory != "Cibo")) {
+                                (tourCategory != "INDOOR" &&
+                                    tourCategory != "GUIDE")) {
                               _centerMap(
                                 LatLng(
                                   _waypoints[index].latitude,
@@ -2122,7 +2365,8 @@ Widget _buildWaypointItem({
                             }
                           }
                         }
-                      });                },
+                      });
+                    },
                     borderRadius: BorderRadius.circular(12),
                     child: Padding(
                       padding: const EdgeInsets.symmetric(
@@ -2132,16 +2376,55 @@ Widget _buildWaypointItem({
                       child: Row(
                         children: [
                           // Waypoint number con logica degli indici corretta
+                          // Container(
+                          //   width: isSubWaypoint ? 24 : 28,
+                          //   height: isSubWaypoint ? 24 : 28,
+                          //   decoration: BoxDecoration(
+                          //     color:
+                          //         isSubWaypoint
+                          //             ? AppColors.primary.withOpacity(0.7)
+                          //             : AppColors.primary,
+                          //     shape: BoxShape.circle,
+                          //     border: Border.all(
+                          //       color: Colors.white,
+                          //       width: 1.5,
+                          //     ),
+                          //     boxShadow: [
+                          //       BoxShadow(
+                          //         color: Colors.black.withOpacity(0.2),
+                          //         blurRadius: 3,
+                          //         offset: const Offset(0, 1),
+                          //       ),
+                          //     ],
+                          //   ),
+                          //   child: Center(
+                          //     child: Text(
+                          //       // Logica corretta per gli indici
+                          //       isSubWaypoint
+                          //           ? '${(parentIndex ?? 0) + 1}.${index + 1}' // Sub-waypoint: 2.1, 2.2, etc.
+                          //           : '${index + 1}', // Waypoint principale: 1, 2, 3, etc.
+                          //       style: TextStyle(
+                          //         color: Colors.white,
+                          //         fontWeight: FontWeight.bold,
+                          //         fontSize: isSubWaypoint ? 10 : 12,
+                          //       ),
+                          //     ),
+                          //   ),
+                          // ),
                           Container(
                             width: isSubWaypoint ? 24 : 28,
                             height: isSubWaypoint ? 24 : 28,
                             decoration: BoxDecoration(
-                              color:
-                                  isSubWaypoint
+                              color: isPreliminaryInfo
+                                  ? AppColors.primary.withOpacity(0.15)
+                                  : (isSubWaypoint
                                       ? AppColors.primary.withOpacity(0.7)
-                                      : AppColors.primary,
+                                      : AppColors.primary),
                               shape: BoxShape.circle,
-                              border: Border.all(color: Colors.white, width: 1.5),
+                              border: Border.all(
+                                color: isPreliminaryInfo ? AppColors.primary : Colors.white,
+                                width: 1.5,
+                              ),
                               boxShadow: [
                                 BoxShadow(
                                   color: Colors.black.withOpacity(0.2),
@@ -2151,33 +2434,67 @@ Widget _buildWaypointItem({
                               ],
                             ),
                             child: Center(
-                              child: Text(
-                                // Logica corretta per gli indici
-                                isSubWaypoint
-                                    ? '${(parentIndex ?? 0) + 1}.${index + 1}' // Sub-waypoint: 2.1, 2.2, etc.
-                                    : '${index + 1}', // Waypoint principale: 1, 2, 3, etc.
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: isSubWaypoint ? 10 : 12,
-                                ),
-                              ),
+                              child: isPreliminaryInfo
+                                  ? Icon(
+                                      Icons.info_outline,
+                                      size: isSubWaypoint ? 14 : 16,
+                                      color: AppColors.primary,
+                                    )
+                                  : Text(
+                                      isSubWaypoint
+                                          ? '${(parentIndex ?? 0)}.${index + 1}'
+                                          : '${index}',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: isSubWaypoint ? 10 : 12,
+                                      ),
+                                    ),
                             ),
                           ),
                           const SizedBox(width: 16),
-              
+
                           // Waypoint name
+                          // Expanded(
+                          //   child: Text(
+                          //     title,
+                          //     style: TextStyle(
+                          //       fontSize: isSubWaypoint ? 14 : 16,
+                          //       fontWeight: FontWeight.w500,
+                          //       color: AppColors.textSecondary,
+                          //     ),
+                          //   ),
+                          // ),
                           Expanded(
-                            child: Text(
-                              title,
-                              style: TextStyle(
-                                fontSize: isSubWaypoint ? 14 : 16,
-                                fontWeight: FontWeight.w500,
-                                color: AppColors.textSecondary,
-                              ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                if (isPreliminaryInfo)
+                                  Padding(
+                                    padding: const EdgeInsets.only(bottom: 4),
+                                    child: Text(
+                                      'preliminary_info'.tr(),
+                                      style: TextStyle(
+                                        fontSize: context.r.sp(11),
+                                        fontWeight: FontWeight.w700,
+                                        color: AppColors.primary,
+                                      ),
+                                    ),
+                                  ),
+                                Text(
+                                  title,
+                                  style: TextStyle(
+                                    fontSize: isSubWaypoint ? 14 : 16,
+                                    fontWeight: isPreliminaryInfo ? FontWeight.w700 : FontWeight.w500,
+                                    color: isPreliminaryInfo
+                                        ? AppColors.textPrimary
+                                        : AppColors.textSecondary,
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
-              
+
                           // Expand/collapse icon
                           Icon(
                             (isExpanded)
@@ -2255,8 +2572,8 @@ Widget _buildWaypointItem({
                     // Description
                     Text(
                       description,
-                      style: const TextStyle(
-                        fontSize: 14,
+                      style: TextStyle(
+                        fontSize: context.r.sp(14),
                         color: AppColors.textSecondary,
                         height: 1.5,
                       ),
@@ -2270,128 +2587,118 @@ Widget _buildWaypointItem({
                           height: 100,
                           child: ListView.builder(
                             scrollDirection: Axis.horizontal,
-                            itemCount: widget.isOffline ? _offlineImagesByWaypoint[waypointIndex]?.length : images.length,
+                            itemCount:
+                                widget.isOffline
+                                    ? _offlineImagesByWaypoint[waypointIndex]
+                                        ?.length
+                                    : images.length,
                             addAutomaticKeepAlives: true,
                             itemBuilder: (context, imageIndex) {
                               return Padding(
                                 padding: const EdgeInsets.only(right: 8.0),
                                 child: ClipRRect(
                                   borderRadius: BorderRadius.circular(8.0),
-                                  child: widget.isOffline
-                                    ? (() {
-                                      final offlineList = _offlineImagesByWaypoint[waypointIndex] ?? const <String>[];
-                                      if (imageIndex < offlineList.length && offlineList[imageIndex].isNotEmpty) {
-                                      // return Image.file(
-                                      //   File(offlineList[imageIndex]),
-                                      //   height: 100,
-                                      //   width: 150,
-                                      //   fit: BoxFit.cover,
-                                      //   errorBuilder: (context, error, stackTrace) {
-                                      //   return Container(
-                                      //     height: 100,
-                                      //     width: 150,
-                                      //     decoration: BoxDecoration(
-                                      //     color: Colors.grey.shade300,
-                                      //     borderRadius: BorderRadius.circular(8.0),
-                                      //     ),
-                                      //     child: Icon(
-                                      //     Icons.image_not_supported,
-                                      //     color: Colors.grey.shade600,
-                                      //     ),
-                                      //   );
-                                      //   },
-                                      // );
-                                      return ZlibImage(
-                                        filePath: offlineList[imageIndex],
-                                        width: 150,
-                                        height: 100,
-                                        fit: BoxFit.cover,
-                                        useCache: false,
-                                        errorBuilder:
-                                          (context, error, stackTrace) {
-                                            return Container(
-                                              height: 100,
-                                              width: 150,
-                                              decoration: BoxDecoration(
-                                                color: Colors.grey.shade300,
-                                                borderRadius:
-                                                  BorderRadius.circular(8.0),
-                                              ),
-                                              child: Icon(
-                                                Icons.image_not_supported,
-                                                color: Colors.grey.shade600,
-                                              ),
-                                            );
-                                          },
-                                      );
-                                      } else {
-                                      return Container(
-                                        height: 100,
-                                        width: 150,
-                                        decoration: BoxDecoration(
-                                        color: Colors.grey.shade300,
-                                        borderRadius: BorderRadius.circular(8.0),
-                                        ),
-                                        child: Icon(
-                                        Icons.image_not_supported,
-                                        color: Colors.grey.shade600,
-                                        ),
-                                      );
-                                      }
-                                    })()
-                                    // : Image.network(
-                                    //   "${ApiService.basicUrl}/stream_minio_resource/?waypoint=$waypointIndex&file=${images[imageIndex]}",
-                                    //   height: 100,
-                                    //   width: 150,
-                                    //   fit: BoxFit.cover,
-                                    //   errorBuilder: (context, error, stackTrace) {
-                                    //   return Container(
-                                    //     height: 100,
-                                    //     width: 150,
-                                    //     decoration: BoxDecoration(
-                                    //     color: Colors.grey.shade300,
-                                    //     borderRadius: BorderRadius.circular(8.0),
-                                    //     ),
-                                    //     child: Icon(
-                                    //     Icons.image_not_supported,
-                                    //     color: Colors.grey.shade600,
-                                    //     ),
-                                    //   );
-                                    //   },
-                                    // ),
-                                    : ZlibImage(
-                                      url:
-                                        "${ApiService.basicUrl}/stream_minio_resource/?waypoint=$waypointIndex&file=${images[imageIndex]}",
-                                      width: 150,
-                                      height: 100,
-                                      fit: BoxFit.cover,
-                                      useCache: false,
-                                      errorBuilder:
-                                        (context, error, stackTrace) {
-                                          return Container(
-                                            height: 100,
+                                  child:
+                                      widget.isOffline
+                                          ? (() {
+                                            final offlineList =
+                                                _offlineImagesByWaypoint[waypointIndex] ??
+                                                const <String>[];
+                                            if (imageIndex <
+                                                    offlineList.length &&
+                                                offlineList[imageIndex]
+                                                    .isNotEmpty) {
+                                              return ZlibImage(
+                                                filePath:
+                                                    offlineList[imageIndex],
+                                                width: 150,
+                                                height: 100,
+                                                fit: BoxFit.cover,
+                                                useCache: false,
+                                                errorBuilder: (
+                                                  context,
+                                                  error,
+                                                  stackTrace,
+                                                ) {
+                                                  return Container(
+                                                    height: 100,
+                                                    width: 150,
+                                                    decoration: BoxDecoration(
+                                                      color:
+                                                          Colors.grey.shade300,
+                                                      borderRadius:
+                                                          BorderRadius.circular(
+                                                            8.0,
+                                                          ),
+                                                    ),
+                                                    child: Icon(
+                                                      Icons.image_not_supported,
+                                                      color:
+                                                          Colors.grey.shade600,
+                                                    ),
+                                                  );
+                                                },
+                                              );
+                                            } else {
+                                              return Container(
+                                                height: 100,
+                                                width: 150,
+                                                decoration: BoxDecoration(
+                                                  color: Colors.grey.shade300,
+                                                  borderRadius:
+                                                      BorderRadius.circular(
+                                                        8.0,
+                                                      ),
+                                                ),
+                                                child: Icon(
+                                                  Icons.image_not_supported,
+                                                  color: Colors.grey.shade600,
+                                                ),
+                                              );
+                                            }
+                                          })()
+                                          : CachedNetworkImage(
+                                            imageUrl:
+                                                "${ApiService.basicUrl}/stream_minio_resource/?waypoint=$waypointIndex&file=${images[imageIndex]}",
                                             width: 150,
-                                            decoration: BoxDecoration(
-                                              color: Colors.grey.shade300,
-                                              borderRadius:
-                                                BorderRadius.circular(8.0),
-                                            ),
-                                            child: Icon(
-                                              Icons.image_not_supported,
-                                              color: Colors.grey.shade600,
-                                            ),
-                                          );
-                                        },
+                                            height: 100,
+                                            fit: BoxFit.cover,
+                                            placeholder:
+                                                (context, url) => const Center(
+                                                  child:
+                                                      CircularProgressIndicator(
+                                                        strokeWidth: 2,
+                                                      ),
+                                                ),
+                                            errorWidget: (context, url, error) {
+                                              return Container(
+                                                height: 100,
+                                                width: 150,
+                                                decoration: BoxDecoration(
+                                                  color: Colors.grey.shade300,
+                                                  borderRadius:
+                                                      BorderRadius.circular(
+                                                        8.0,
+                                                      ),
+                                                ),
+                                                child: Icon(
+                                                  Icons.image_not_supported,
+                                                  color: Colors.grey.shade600,
+                                                ),
+                                              );
+                                            },
+                                          ),
                                 ),
-                                ),
-                                );
+                              );
                             },
                           ),
                         ),
                       ),
 
                     // Navigate button - SOLO per waypoints principali
-                    if (!isSubWaypoint && _tourDetails!.category != "INSIDE") ...[
+                    if (!isPreliminaryInfo && !isSubWaypoint &&
+                        _tourDetails!.category != "INDOOR" &&
+                        _tourDetails!.category != "GUIDE") ...[
                       const SizedBox(height: 16),
                       SizedBox(
                         width: double.infinity,
@@ -2402,6 +2709,46 @@ Widget _buildWaypointItem({
                           style: ElevatedButton.styleFrom(
                             backgroundColor: AppColors.primary,
                             foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+
+                    // if(!isSubWaypoint && _tourDetails?.status != "BUILT" && _tourDetails?.category == "GUIDE") ...[
+                    // if(!isSubWaypoint && _tourDetails?.category == "GUIDE") ...[
+                    if (!isSubWaypoint) ...[
+                      const SizedBox(height: 8),
+                      SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton.icon(
+                          onPressed: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder:
+                                    (context) => ConsultationScreen(
+                                      tourId: widget.tourId,
+                                      waypointId: waypointIndex,
+                                      landmarkName: title,
+                                      landmarkDescription: description,
+                                      landmarkImages: images,
+                                      isOffline: widget.isOffline,
+                                    ),
+                              ),
+                            );
+                          },
+                          icon: const Icon(
+                            Icons.art_track_outlined,
+                            color: AppColors.primary,
+                          ),
+                          label: Text('open_resource_consultation'.tr()),
+                          style: OutlinedButton.styleFrom(
+                            side: BorderSide(color: AppColors.primary),
+                            foregroundColor: AppColors.primary,
                             padding: const EdgeInsets.symmetric(vertical: 12),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(8),
@@ -2423,7 +2770,7 @@ Widget _buildWaypointItem({
                             Text(
                               'Sub-locations',
                               style: TextStyle(
-                                fontSize: 16,
+                                fontSize: context.r.sp(16),
                                 fontWeight: FontWeight.bold,
                                 color: AppColors.textPrimary,
                               ),
@@ -2443,6 +2790,7 @@ Widget _buildWaypointItem({
                                 tourCategory: tourCategory,
                                 latitude: sub.latitude,
                                 longitude: sub.longitude,
+                                isPreliminaryInfo: sub.isPreliminaryInfo,
                                 parentIndex:
                                     index, // Passa l'indice del waypoint principale
                                 isSubWaypoint:
@@ -2490,7 +2838,7 @@ Widget _buildWaypointItem({
                 style: TextStyle(
                   color: Colors.white,
                   fontWeight: FontWeight.bold,
-                  fontSize: 10,
+                  fontSize: context.r.sp(10),
                 ),
               ),
             ),
@@ -2504,7 +2852,7 @@ Widget _buildWaypointItem({
                 Text(
                   subWaypoint.title,
                   style: TextStyle(
-                    fontSize: 14,
+                    fontSize: context.r.sp(14),
                     fontWeight: FontWeight.w500,
                     color: AppColors.textPrimary,
                   ),
@@ -2513,7 +2861,7 @@ Widget _buildWaypointItem({
                   Text(
                     subWaypoint.description,
                     style: TextStyle(
-                      fontSize: 12,
+                      fontSize: context.r.sp(12),
                       color: AppColors.textSecondary,
                     ),
                     maxLines: 2,
@@ -2524,12 +2872,10 @@ Widget _buildWaypointItem({
           ),
           // Bottone navigazione
           IconButton(
-            onPressed: () => _launchMapApp(subWaypoint.latitude, subWaypoint.longitude),
-            icon: Icon(
-              Icons.navigation,
-              color: AppColors.primary,
-              size: 20,
-            ),
+            onPressed:
+                () =>
+                    _launchMapApp(subWaypoint.latitude, subWaypoint.longitude),
+            icon: Icon(Icons.navigation, color: AppColors.primary, size: 20),
           ),
         ],
       ),
@@ -2584,16 +2930,16 @@ Widget _buildWaypointItem({
                   children: [
                     Text(
                       name,
-                      style: const TextStyle(
-                        fontSize: 16,
+                      style: TextStyle(
+                        fontSize: context.r.sp(16),
                         fontWeight: FontWeight.bold,
                         color: AppColors.textPrimary,
                       ),
                     ),
                     Text(
                       date,
-                      style: const TextStyle(
-                        fontSize: 12,
+                      style: TextStyle(
+                        fontSize: context.r.sp(12),
                         color: AppColors.textSecondary,
                       ),
                     ),
@@ -2614,8 +2960,8 @@ Widget _buildWaypointItem({
                     const SizedBox(width: 4),
                     Text(
                       rating.toStringAsFixed(1).toString(),
-                      style: const TextStyle(
-                        fontSize: 14,
+                      style: TextStyle(
+                        fontSize: context.r.sp(14),
                         fontWeight: FontWeight.bold,
                         color: AppColors.textPrimary,
                       ),
@@ -2631,8 +2977,8 @@ Widget _buildWaypointItem({
           // Review comment
           Text(
             comment,
-            style: const TextStyle(
-              fontSize: 14,
+            style: TextStyle(
+              fontSize: context.r.sp(14),
               color: AppColors.textSecondary,
               height: 1.5,
             ),
@@ -2646,7 +2992,7 @@ Widget _buildWaypointItem({
           //   child: const Text(
           //     'Read more',
           //     style: TextStyle(
-          //       fontSize: 14,
+          //       fontSize: context.r.sp(14),
           //       fontWeight: FontWeight.bold,
           //       color: AppColors.primary,
           //     ),
@@ -2657,7 +3003,17 @@ Widget _buildWaypointItem({
     );
   }
 
-void _showLeaveReviewSheet(int tourId) {
+  void _showLeaveReviewSheet(int tourId) {
+    if (widget.isGuest) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('guest_review_not_allowed'.tr()),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+    
     showModalBottomSheet(
       context: context,
       isScrollControlled: true, // Allows the sheet to be scrollable
@@ -2695,7 +3051,7 @@ void _showLeaveReviewSheet(int tourId) {
                       child: Text(
                         'leave_review'.tr(),
                         style: TextStyle(
-                          fontSize: 20,
+                          fontSize: context.r.sp(20),
                           fontWeight: FontWeight.bold,
                         ),
                       ),
@@ -2725,7 +3081,7 @@ void _showLeaveReviewSheet(int tourId) {
                     Text(
                       'comments'.tr(),
                       style: TextStyle(
-                        fontSize: 16,
+                        fontSize: context.r.sp(16),
                         fontWeight: FontWeight.bold,
                       ),
                     ),
@@ -2769,8 +3125,10 @@ void _showLeaveReviewSheet(int tourId) {
                         TextButton(
                           style: TextButton.styleFrom(
                             padding: const EdgeInsets.symmetric(
-                              horizontal: 32, vertical: 12),
-                            textStyle: TextStyle(fontSize: 20),
+                              horizontal: 32,
+                              vertical: 12,
+                            ),
+                            textStyle: TextStyle(fontSize: context.r.sp(20)),
                           ),
                           onPressed: () {
                             Navigator.pop(context); // Close the sheet
@@ -2781,16 +3139,40 @@ void _showLeaveReviewSheet(int tourId) {
                         TextButton(
                           style: TextButton.styleFrom(
                             padding: const EdgeInsets.symmetric(
-                              horizontal: 32, vertical: 12),
+                              horizontal: 32,
+                              vertical: 12,
+                            ),
                             backgroundColor: AppColors.primary,
                             foregroundColor: Colors.white,
-                            textStyle: const TextStyle(fontSize: 20),
+                            textStyle: TextStyle(fontSize: context.r.sp(20)),
                           ),
                           onPressed: () {
                             final rating = _userRating;
                             final comment = _reviewController.text;
 
-                            _apiService.leaveReview(tourId, rating, comment, baseUrl: _apiService.getCurrentBaseUrl());
+                            _apiService.leaveReview(
+                              tourId,
+                              rating,
+                              comment,
+                              baseUrl: _apiService.getCurrentBaseUrl(),
+                            );
+
+                            if (mounted) {
+                              setState(() {
+                                _hasUserAlreadyReviewed = true;
+                              });
+                            }
+
+                            unawaited(
+                              _analytics.logEvent(
+                                name: 'leave_review',
+                                parameters: {
+                                  'tour_id': tourId,
+                                  'rating': rating,
+                                  "source": "about_screen",
+                                },
+                              ),
+                            );
                             _loadData();
 
                             Navigator.pop(context); // Close the sheet
@@ -2819,6 +3201,8 @@ void _showLeaveReviewSheet(int tourId) {
   }
 
   Widget _buildOfflineSection() {
+    final bool canDownloadOffline =
+        _isAvailableOffline || _tourDetails?.status == "BUILT";
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -2844,8 +3228,8 @@ void _showLeaveReviewSheet(int tourId) {
               const SizedBox(width: 12),
               Text(
                 "offline_access".tr(),
-                style: const TextStyle(
-                  fontSize: 16,
+                style: TextStyle(
+                  fontSize: context.r.sp(16),
                   fontWeight: FontWeight.w600,
                   color: AppColors.textPrimary,
                 ),
@@ -2857,8 +3241,8 @@ void _showLeaveReviewSheet(int tourId) {
             _isAvailableOffline
                 ? "tour_available_offline".tr()
                 : "download_tour_offline_description".tr(),
-            style: const TextStyle(
-              fontSize: 14,
+            style: TextStyle(
+              fontSize: context.r.sp(14),
               color: AppColors.textSecondary,
             ),
           ),
@@ -2866,24 +3250,44 @@ void _showLeaveReviewSheet(int tourId) {
           SizedBox(
             width: double.infinity,
             child: ElevatedButton.icon(
-              onPressed: _isDownloading ? null : (_isAvailableOffline ? _confirmRemoveOfflineTour : _downloadTourOffline),
-              icon: _isDownloading
-                  ? const SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(
-                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                      strokeWidth: 2,
-                    ),
-                  )
-                : Icon(_isAvailableOffline ? Icons.delete_outline : Icons.download),
+              // onPressed: _isDownloading ? null : (_isAvailableOffline ? _confirmRemoveOfflineTour : _downloadTourOffline),
+              onPressed:
+                  (_isDownloading || !canDownloadOffline)
+                      ? null
+                      : (_isAvailableOffline
+                          ? _confirmRemoveOfflineTour
+                          : _downloadTourOffline),
+              icon:
+                  _isDownloading
+                      ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          valueColor: AlwaysStoppedAnimation<Color>(
+                            Colors.white,
+                          ),
+                          strokeWidth: 2,
+                        ),
+                      )
+                      : Icon(
+                        _isAvailableOffline
+                            ? Icons.delete_outline
+                            : Icons.download,
+                      ),
               label: Text(
                 _isDownloading
-                  ? "downloading".tr()
-                  : (_isAvailableOffline ? "remove".tr() : "download_for_offline".tr()),
+                    ? "downloading".tr()
+                    : (_isAvailableOffline
+                        ? "remove".tr()
+                        : "download_for_offline".tr()),
               ),
               style: ElevatedButton.styleFrom(
-                backgroundColor: _isAvailableOffline ? Colors.red : AppColors.primary,
+                backgroundColor:
+                    !canDownloadOffline
+                        ? Colors.grey
+                        : (_isAvailableOffline
+                            ? Colors.red
+                            : AppColors.primary),
                 foregroundColor: Colors.white,
                 padding: const EdgeInsets.symmetric(vertical: 12),
                 shape: RoundedRectangleBorder(

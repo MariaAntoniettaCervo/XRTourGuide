@@ -148,6 +148,7 @@ REDIS_URL=redis://redis:6379
 CALLBACK_ENDPOINT=http://web:8001/complete_build/
 TRAIN_ENDPOINT=http://ai_training:8090/train_model
 INFERENCE_ENDPOINT=http://ai_inference:8050/inference
+INFERENCE_CACHE_CLEAR_ENDPOINT=http://ai_inference:8050/cache/clear
 PMTILES_URL=http://pmtiles-server:8081/extract
 
 #Community server
@@ -217,7 +218,17 @@ XRTourGuide is a sub-project of [FUTURAL](https://futural-project.eu/it/), an EU
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+Shield: [![CC BY-NC 4.0][cc-by-nc-shield]][cc-by-nc]
+
+This work is licensed under a
+[Creative Commons Attribution-NonCommercial 4.0 International License][cc-by-nc].
+
+[![CC BY-NC 4.0][cc-by-nc-image]][cc-by-nc]
+
+[cc-by-nc]: https://creativecommons.org/licenses/by-nc/4.0/
+[cc-by-nc-image]: https://licensebuttons.net/l/by-nc/4.0/88x31.png
+[cc-by-nc-shield]: https://img.shields.io/badge/License-CC%20BY--NC%204.0-lightgrey.svg
+
 
 ---
 

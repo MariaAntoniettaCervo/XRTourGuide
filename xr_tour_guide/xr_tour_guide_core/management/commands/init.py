@@ -82,7 +82,7 @@ class Command(BaseCommand):
                 title=sub_tour_title,
                 subtitle="Sub Interno",
                 place="Place D Interno",
-                category="INSIDE",
+                category="INDOOR",
                 description="Questo è il sub-tour interno collegato al tour misto",
                 user=user,
                 coordinates="41.9028,12.4964",

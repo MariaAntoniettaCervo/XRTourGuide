@@ -5,6 +5,31 @@ class LocalStateService {
   static const String scannedWaypointsKey = 'scanned_waypoints';
   static const String completedToursKey = 'completed_tours';
 
+  static const String selectedServerUrlKey = 'selected_server_url';
+  static const String selectedServerNameKey = 'selected_server_name';
+
+  Future<void> saveSelectedServer({required String name, required String url}) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(selectedServerNameKey, name);
+    await prefs.setString(selectedServerUrlKey, url);
+  } 
+
+  Future<String?> getSelectedServerUrl() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(selectedServerUrlKey);
+  }
+
+  Future<String?> getSelectedServerName() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(selectedServerNameKey);
+  }
+
+  Future<void> clearSelectedServer() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(selectedServerNameKey);
+    await prefs.remove(selectedServerUrlKey);
+  }
+
   // Salva i waypoint scansionati per un tour
   Future<void> saveScannedWaypoints(int tourId, List<int> waypointIds) async {
     final prefs = await SharedPreferences.getInstance();

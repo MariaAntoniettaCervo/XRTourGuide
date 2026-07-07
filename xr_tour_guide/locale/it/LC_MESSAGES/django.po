@@ -1,0 +1,1723 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: XRTourGuide\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-05-18 13:01+0000\n"
+"PO-Revision-Date: 2026-05-18 15:32+0200\n"
+"Last-Translator: \n"
+"Language-Team: Italian\n"
+"Language: it\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+#: templates/account/login.html:640
+msgid "Welcome Back"
+msgstr "Bentornato"
+
+#: templates/account/login.html:641
+msgid "Sign in to your account"
+msgstr "Accedi al tuo account"
+
+#: templates/account/login.html:658 templates/account/login.html:661
+#: templates/account/login.html:699 templates/account/login.html:756
+#: xr_tour_guide_core/models.py:53
+#: xr_tour_guide_public/templates/xr_tour_guide_public/register.html:599
+#: xr_tour_guide_public/templates/xr_tour_guide_public/register.html:649
+msgid "Email"
+msgstr "Email"
+
+#: templates/account/login.html:670 templates/account/login.html:673
+#: xr_tour_guide_public/templates/xr_tour_guide_public/register.html:604
+msgid "Password"
+msgstr "Password"
+
+#: templates/account/login.html:679
+msgid "Forgot password?"
+msgstr "Password dimenticata?"
+
+#: templates/account/login.html:683
+#: xr_tour_guide_public/templates/xr_tour_guide_public/landing_page/landing_page.html:1448
+#: xr_tour_guide_public/templates/xr_tour_guide_public/landing_page/landing_page.html:1768
+#: xr_tour_guide_public/templates/xr_tour_guide_public/register.html:629
+msgid "Sign In"
+msgstr "Accedi"
+
+#: templates/account/login.html:690 templates/password_reset_confirm.html:261
+msgid "Reset Password"
+msgstr "Reimposta la password"
+
+#: templates/account/login.html:691
+msgid "Enter your email to receive a password reset link"
+msgstr "Inserisci la tua email per ricevere un link di reimpostazione password"
+
+#: templates/account/login.html:700 templates/account/login.html:757
+#: xr_tour_guide_public/templates/xr_tour_guide_public/register.html:600
+#: xr_tour_guide_public/templates/xr_tour_guide_public/register.html:650
+msgid "your@email.com"
+msgstr "tuamail@esempio.com"
+
+#: templates/account/login.html:705 templates/account/login.html:783
+msgid "Send Reset Link"
+msgstr "Invia il link di reimpostazione"
+
+#: templates/account/login.html:710
+msgid "Back to Sign In"
+msgstr "Torna all'accesso"
+
+#: templates/account/login.html:715
+msgid "or"
+msgstr "oppure"
+
+#: templates/account/login.html:726
+msgid "Continue with Google"
+msgstr "Continua con Google"
+
+#: templates/account/login.html:736
+msgid "Don't have an account?"
+msgstr "Non hai un account?"
+
+#: templates/account/login.html:736
+msgid "Sign Up"
+msgstr "Registrati"
+
+#: templates/account/login.html:741
+#: xr_tour_guide_public/templates/xr_tour_guide_public/register.html:634
+msgid "Didn't receive verification email?"
+msgstr "Non hai ricevuto l'email di verifica?"
+
+#: templates/account/login.html:742
+#: xr_tour_guide_public/templates/xr_tour_guide_public/register.html:635
+msgid "Resend it"
+msgstr "Reinviala"
+
+#: templates/account/login.html:747
+#: xr_tour_guide_public/templates/xr_tour_guide_public/register.html:640
+msgid "Resend Verification Email"
+msgstr "Reinvia l'email di verifica"
+
+#: templates/account/login.html:748
+#: xr_tour_guide_public/templates/xr_tour_guide_public/register.html:641
+msgid "Enter your email address to receive a new verification link"
+msgstr "Inserisci il tuo indirizzo email per ricevere un nuovo link di verifica"
+
+#: templates/account/login.html:762 templates/account/login.html:782
+#: xr_tour_guide_public/templates/xr_tour_guide_public/register.html:655
+#: xr_tour_guide_public/templates/xr_tour_guide_public/register.html:680
+msgid "Send Verification Email"
+msgstr "Invia l'email di verifica"
+
+#: templates/account/login.html:767
+#: xr_tour_guide_public/templates/xr_tour_guide_public/register.html:660
+msgid "Cancel"
+msgstr "Annulla"
+
+#: templates/account/login.html:781
+#: xr_tour_guide_public/templates/xr_tour_guide_public/register.html:679
+msgid "Sending..."
+msgstr "Invio in corso..."
+
+#: templates/account/login.html:784
+#: xr_tour_guide_public/templates/xr_tour_guide_public/register.html:681
+msgid "Verification email sent successfully!"
+msgstr "Email di verifica inviata con successo!"
+
+#: templates/account/login.html:785
+msgid "Password reset email sent successfully!"
+msgstr "Email di reimpostazione password inviata con successo!"
+
+#: templates/account/login.html:786
+#: xr_tour_guide_public/templates/xr_tour_guide_public/register.html:676
+msgid "Error"
+msgstr "Errore"
+
+#: templates/account/login.html:787
+#: xr_tour_guide_public/templates/xr_tour_guide_public/register.html:682
+msgid "Email not found"
+msgstr "Email non trovata"
+
+#: templates/account/login.html:788
+#: xr_tour_guide_public/templates/xr_tour_guide_public/register.html:683
+msgid "Email already verified"
+msgstr "Email già verificata"
+
+#: templates/account/login.html:789
+#: xr_tour_guide_public/templates/xr_tour_guide_public/register.html:684
+msgid "Error sending email"
+msgstr "Errore durante l'invio dell'email"
+
+#: templates/account/login.html:790
+#: xr_tour_guide_public/templates/xr_tour_guide_public/register.html:678
+msgid "Network error. Check your connection and try again."
+msgstr "Errore di rete. Controlla la tua connessione e riprova."
+
+#: templates/account/login.html:791
+msgid "Google login failed. Please try again."
+msgstr "Accesso con Google non riuscito. Riprova."
+
+#: templates/account/login.html:792
+msgid "Google Sign-In is loading. Please try again in a moment."
+msgstr "L'accesso con Google è in caricamento. Riprova tra un attimo."
+
+#: templates/admin/index.html:7 templates/admin/index.html:504
+#: xr_tour_guide/settings.py:305
+msgid "Dashboard"
+msgstr "Dashboard"
+
+#: templates/admin/index.html:505
+#, python-format
+msgid "Welcome, %(name)s"
+msgstr "Benvenuto, %(name)s"
+
+#: templates/admin/index.html:526
+msgid "Total Tours"
+msgstr "Tour totali"
+
+#: templates/admin/index.html:533 templates/admin/index.html:615
+#: xr_tour_guide/settings.py:328 xr_tour_guide_core/models.py:277
+msgid "Reviews"
+msgstr "Recensioni"
+
+#: templates/admin/index.html:540
+msgid "Average Rating"
+msgstr "Valutazione media"
+
+#: templates/admin/index.html:547 templates/admin/index.html:616
+#: xr_tour_guide_core/models.py:235
+msgid "Waypoints"
+msgstr "Waypoint"
+
+#: templates/admin/index.html:558
+msgid "Advanced Statistics"
+msgstr "Statistiche avanzate"
+
+#: templates/admin/index.html:559
+msgid "View detailed charts and analytics"
+msgstr "Visualizza grafici e analisi dettagliate"
+
+#: templates/admin/index.html:569
+msgid "Tours by Category"
+msgstr "Tour per categoria"
+
+#: templates/admin/index.html:570
+msgid "Distribution of your tours"
+msgstr "Distribuzione dei tuoi tour"
+
+#: templates/admin/index.html:574
+msgid "Tours by Status"
+msgstr "Tour per stato"
+
+#: templates/admin/index.html:575
+msgid "Current state of tours"
+msgstr "Stato attuale dei tour"
+
+#: templates/admin/index.html:584
+msgid "Your Tours"
+msgstr "I tuoi tour"
+
+#: templates/admin/index.html:588
+msgid "New Tour"
+msgstr "Nuovo tour"
+
+#: templates/admin/index.html:592
+#: templates/admin/xr_tour_guide_core/tour/import_tour.html:28
+msgid "Import Tour"
+msgstr "Importa tour"
+
+#: templates/admin/index.html:596
+msgid "View all"
+msgstr "Vedi tutti"
+
+#: templates/admin/index.html:611 xr_tour_guide/settings.py:318
+#: xr_tour_guide_core/models.py:111 xr_tour_guide_core/models.py:172
+#: xr_tour_guide_core/models.py:269
+msgid "Tour"
+msgstr "Tour"
+
+#: templates/admin/index.html:612 xr_tour_guide_core/models.py:88
+msgid "Category"
+msgstr "Categoria"
+
+#: templates/admin/index.html:613 xr_tour_guide_core/admin/tour_admin.py:183
+#: xr_tour_guide_core/models.py:101
+msgid "Status"
+msgstr "Stato"
+
+#: templates/admin/index.html:614 xr_tour_guide_core/models.py:271
+msgid "Rating"
+msgstr "Valutazione"
+
+#: templates/admin/index.html:618
+msgid "Reports"
+msgstr "Segnalazioni"
+
+#: templates/admin/index.html:620
+msgid "Date"
+msgstr "Data"
+
+#: templates/admin/index.html:621
+msgid "Actions"
+msgstr "Azioni"
+
+#: templates/admin/index.html:721 templates/admin/index.html:728
+msgid "Train"
+msgstr "Allena"
+
+#: templates/admin/index.html:726
+msgid "Build offline"
+msgstr "Genera offline"
+
+#: templates/admin/index.html:735
+msgid "Building…"
+msgstr "Generazione…"
+
+#: templates/admin/index.html:740
+msgid "View"
+msgstr "Apri"
+
+#: templates/admin/index.html:744 xr_tour_guide_core/admin/tour_admin.py:93
+msgid "Export"
+msgstr "Esporta"
+
+#: templates/admin/index.html:751
+msgid "Delete"
+msgstr "Elimina"
+
+#: templates/admin/index.html:790
+msgid "No tours available"
+msgstr "Nessun tour disponibile"
+
+#: templates/admin/index.html:791
+msgid "Start by creating your first virtual tour"
+msgstr "Inizia creando il tuo primo tour virtuale"
+
+#: templates/admin/index.html:794
+msgid "Create your first tour"
+msgstr "Crea il tuo primo tour"
+
+#: templates/admin/index.html:872 xr_tour_guide_core/models.py:112
+msgid "Tours"
+msgstr "Tour"
+
+#: templates/admin/xr_tour_guide_core/tour/change_list.html:20
+#: templates/admin/xr_tour_guide_core/tour/import_tour.html:108
+msgid "Import tour"
+msgstr "Importa tour"
+
+#: templates/admin/xr_tour_guide_core/tour/import_tour.html:31
+msgid "Upload a ZIP archive previously exported from XR Tour Guide."
+msgstr "Carica un archivio ZIP esportato in precedenza da XR Tour Guide."
+
+#: templates/admin/xr_tour_guide_core/tour/import_tour.html:38
+msgid "How it works"
+msgstr "Come funziona"
+
+#: templates/admin/xr_tour_guide_core/tour/import_tour.html:40
+msgid "Select a .zip archive exported from the platform."
+msgstr "Seleziona un archivio .zip esportato dalla piattaforma."
+
+#: templates/admin/xr_tour_guide_core/tour/import_tour.html:41
+msgid "The tour will be imported with all included waypoints and resources."
+msgstr "Il tour verrà importato con tutti i waypoint e le risorse incluse."
+
+#: templates/admin/xr_tour_guide_core/tour/import_tour.html:42
+msgid ""
+"If copy mode is enabled, the imported tour title will be made safe "
+"automatically."
+msgstr ""
+"Se la modalità copia è abilitata, il titolo del tour importato verrà reso "
+"sicuro automaticamente."
+
+#: templates/admin/xr_tour_guide_core/tour/import_tour.html:113
+msgid "Back to tours"
+msgstr "Torna ai tour"
+
+#: templates/password_reset_confirm.html:270
+msgid "New Password"
+msgstr "Nuova password"
+
+#: templates/password_reset_confirm.html:271
+msgid "Enter your new password"
+msgstr "Inserisci la tua nuova password"
+
+#: templates/password_reset_confirm.html:273
+msgid "Change Password"
+msgstr "Cambia password"
+
+#: xr_tour_guide/settings.py:312
+msgid "Functionalities"
+msgstr "Funzionalità"
+
+#: xr_tour_guide/settings.py:323
+msgid "Users"
+msgstr "Utenti"
+
+#: xr_tour_guide_core/admin/tour_admin.py:45
+msgid "🎯 Main Information"
+msgstr "🎯 Informazioni principali"
+
+#: xr_tour_guide_core/admin/tour_admin.py:48
+msgid "📝 Full Description"
+msgstr "📝 Descrizione completa"
+
+#: xr_tour_guide_core/admin/tour_admin.py:51
+msgid "📍 Location and Area"
+msgstr "📍 Luogo e area"
+
+#: xr_tour_guide_core/admin/tour_admin.py:54
+#: xr_tour_guide_core/forms/tour_forms.py:58
+msgid "🖼️ Cover Image"
+msgstr "🖼️ Immagine di copertina"
+
+#: xr_tour_guide_core/admin/tour_admin.py:57
+msgid "🔗 Internal Tours (Optional)"
+msgstr "🔗 Tour interni (opzionale)"
+
+#: xr_tour_guide_core/admin/tour_admin.py:61
+msgid "⚙️ System Information"
+msgstr "⚙️ Informazioni di sistema"
+
+#: xr_tour_guide_core/admin/tour_admin.py:64
+msgid "Technical information automatically managed by the system"
+msgstr "Informazioni tecniche gestite automaticamente dal sistema"
+
+#: xr_tour_guide_core/admin/tour_admin.py:106
+msgid "Image License"
+msgstr "Licenza dell'immagine"
+
+#: xr_tour_guide_core/admin/tour_admin.py:133
+msgid "Content licensed under CC BY-NC 4.0"
+msgstr "Contenuto concesso in licenza ai sensi della CC BY-NC 4.0"
+
+#: xr_tour_guide_core/admin/tour_admin.py:136
+msgid ""
+"The images and multimedia content associated with this tour are protected "
+"under the"
+msgstr ""
+"Le immagini e i contenuti multimediali associati a questo tour sono protetti "
+"dalla"
+
+#: xr_tour_guide_core/admin/tour_admin.py:148
+msgid ""
+"license. Reproduction, distribution or commercial use without explicit "
+"written authorization from the rights holder is strictly prohibited."
+msgstr ""
+"licenza. La riproduzione, la distribuzione o l'uso commerciale senza "
+"esplicita autorizzazione scritta del titolare dei diritti è severamente vietato."
+
+#: xr_tour_guide_core/admin/tour_admin.py:163
+msgid "Attribution required"
+msgstr "Attribuzione richiesta"
+
+#: xr_tour_guide_core/admin/tour_admin.py:170
+msgid "No commercial use"
+msgstr "Nessun uso commerciale"
+
+#: xr_tour_guide_core/admin/tour_admin.py:177
+msgid "Sharing allowed"
+msgstr "Condivisione consentita"
+
+#: xr_tour_guide_core/admin/tour_admin.py:192
+msgid "✅ Ready"
+msgstr "✅ Pronto"
+
+#: xr_tour_guide_core/admin/tour_admin.py:193
+#: xr_tour_guide_core/admin/tour_admin.py:224
+msgid "⏳ Queued"
+msgstr "⏳ In coda"
+
+#: xr_tour_guide_core/admin/tour_admin.py:194
+#: xr_tour_guide_core/admin/tour_admin.py:233
+msgid "🔨 Building"
+msgstr "🔨 In elaborazione"
+
+#: xr_tour_guide_core/admin/tour_admin.py:195
+#: xr_tour_guide_core/admin/tour_admin.py:242
+msgid "❌ Error"
+msgstr "❌ Errore"
+
+#: xr_tour_guide_core/admin/tour_admin.py:207
+msgid "Tour Status"
+msgstr "Stato del tour"
+
+#: xr_tour_guide_core/admin/tour_admin.py:215
+msgid "✅ Ready for Publication"
+msgstr "✅ Pronto per la pubblicazione"
+
+#: xr_tour_guide_core/admin/tour_admin.py:216
+msgid "The tour is complete and ready to be published."
+msgstr "Il tour è completo e pronto per essere pubblicato."
+
+#: xr_tour_guide_core/admin/tour_admin.py:217
+msgid "It will be processed and published automatically."
+msgstr "Verrà elaborato e pubblicato automaticamente."
+
+#: xr_tour_guide_core/admin/tour_admin.py:225
+msgid "The tour is queued for processing."
+msgstr "Il tour è in coda per l'elaborazione."
+
+#: xr_tour_guide_core/admin/tour_admin.py:226
+msgid ""
+"Please wait, it will be processed shortly. Do not modify during this phase."
+msgstr ""
+"Attendi, verrà elaborato a breve. Non modificarlo durante questa fase."
+
+#: xr_tour_guide_core/admin/tour_admin.py:234
+msgid "The tour is being processed."
+msgstr "Il tour è in fase di elaborazione."
+
+#: xr_tour_guide_core/admin/tour_admin.py:235
+msgid ""
+"Do not modify the tour during this phase. The process may take a few minutes."
+msgstr ""
+"Non modificare il tour durante questa fase. Il processo potrebbe richiedere "
+"alcuni minuti."
+
+#: xr_tour_guide_core/admin/tour_admin.py:243
+msgid "An error occurred while processing the tour."
+msgstr "Si è verificato un errore durante l'elaborazione del tour."
+
+#: xr_tour_guide_core/admin/tour_admin.py:244
+msgid "Check the entered data or contact support."
+msgstr "Controlla i dati inseriti o contatta il supporto."
+
+#: xr_tour_guide_core/admin/tour_admin.py:251
+msgid "✅ Ready for Use"
+msgstr "✅ Pronto all'uso"
+
+#: xr_tour_guide_core/admin/tour_admin.py:252
+msgid "Model successfully trained and ready to be used."
+msgstr "Il modello è stato addestrato correttamente ed è pronto per l'uso."
+
+#: xr_tour_guide_core/admin/tour_admin.py:253
+msgid "You can start serving the tour to visitors."
+msgstr "Puoi iniziare a rendere disponibile il tour ai visitatori."
+
+#: xr_tour_guide_core/admin/tour_admin.py:271
+msgid "🔒 Tour Locked:"
+msgstr "🔒 Tour bloccato:"
+
+#: xr_tour_guide_core/admin/tour_admin.py:271
+msgid "You cannot modify the tour in this state."
+msgstr "Non puoi modificare il tour in questo stato."
+
+#: xr_tour_guide_core/admin/tour_admin.py:365
+msgid "❌ Non puoi eliminare questo tour perché è in uno stato bloccato."
+msgstr "❌ Non puoi eliminare questo tour perché è in uno stato bloccato."
+
+#: xr_tour_guide_core/admin/tour_admin.py:379
+msgid "❌ Non puoi modificare questo tour perché è in uno stato bloccato."
+msgstr "❌ Non puoi modificare questo tour perché è in uno stato bloccato."
+
+#: xr_tour_guide_core/admin/user_admin.py:41
+msgid "Full Name"
+msgstr "Nome completo"
+
+#: xr_tour_guide_core/admin/user_admin.py:50
+#: xr_tour_guide_core/admin/user_admin.py:63
+msgid "Account Credentials"
+msgstr "Credenziali account"
+
+#: xr_tour_guide_core/admin/user_admin.py:52
+#: xr_tour_guide_core/admin/user_admin.py:65
+msgid "Login credentials for the user account"
+msgstr "Credenziali di accesso per l'account utente"
+
+#: xr_tour_guide_core/admin/user_admin.py:55
+#: xr_tour_guide_core/admin/user_admin.py:68
+msgid "Personal Information"
+msgstr "Informazioni personali"
+
+#: xr_tour_guide_core/admin/user_admin.py:57
+#: xr_tour_guide_core/admin/user_admin.py:70
+msgid "Personal information and profile details"
+msgstr "Informazioni personali e dettagli del profilo"
+
+#: xr_tour_guide_core/admin/user_admin.py:69
+msgid "first_name"
+msgstr "nome"
+
+#: xr_tour_guide_core/admin/user_admin.py:69
+msgid "last_name"
+msgstr "cognome"
+
+#: xr_tour_guide_core/admin/user_admin.py:69
+msgid "city"
+msgstr "città"
+
+#: xr_tour_guide_core/admin/user_admin.py:69
+msgid "description"
+msgstr "descrizione"
+
+#: xr_tour_guide_core/admin/user_admin.py:73
+msgid "Permissions"
+msgstr "Permessi"
+
+#: xr_tour_guide_core/admin/user_admin.py:75
+msgid "User permissions and access level"
+msgstr "Permessi utente e livello di accesso"
+
+#: xr_tour_guide_core/admin/user_admin.py:90
+msgid "Send Password Reset Email"
+msgstr "Invia l'email di reimpostazione password"
+
+#: xr_tour_guide_core/admin/user_admin.py:94
+msgid "Password Reset"
+msgstr "Reimpostazione password"
+
+#: xr_tour_guide_core/admin/user_admin.py:114
+msgid "User not found."
+msgstr "Utente non trovato."
+
+#: xr_tour_guide_core/admin/user_admin.py:123
+msgid "User does not have an email address."
+msgstr "L'utente non ha un indirizzo email."
+
+#: xr_tour_guide_core/admin/user_admin.py:144
+#, python-brace-format
+msgid "Password reset email sent successfully to {email}"
+msgstr "Email di reimpostazione password inviata con successo a {email}"
+
+#: xr_tour_guide_core/admin/user_admin.py:150
+msgid "Email not found in Community Server."
+msgstr "Email non trovata nel Community Server."
+
+#: xr_tour_guide_core/admin/user_admin.py:156
+msgid "Email already verified or invalid request."
+msgstr "Email già verificata oppure richiesta non valida."
+
+#: xr_tour_guide_core/admin/user_admin.py:160
+#: xr_tour_guide_core/admin/user_admin.py:267
+#: xr_tour_guide_public/templates/xr_tour_guide_public/register.html:677
+msgid "Unknown error"
+msgstr "Errore sconosciuto"
+
+#: xr_tour_guide_core/admin/user_admin.py:163
+#: xr_tour_guide_core/admin/user_admin.py:183
+#, python-brace-format
+msgid "Error sending password reset email: {error}"
+msgstr "Errore durante l'invio dell'email di reimpostazione password: {error}"
+
+#: xr_tour_guide_core/admin/user_admin.py:170
+#: xr_tour_guide_core/admin/user_admin.py:277
+msgid "Connection timeout with Community Server. Please try again."
+msgstr "Timeout di connessione con il Community Server. Riprova."
+
+#: xr_tour_guide_core/admin/user_admin.py:176
+#: xr_tour_guide_core/admin/user_admin.py:283
+msgid ""
+"Cannot connect to Community Server. Please check if the server is running."
+msgstr ""
+"Impossibile connettersi al Community Server. Verifica che il server sia attivo."
+
+#: xr_tour_guide_core/admin/user_admin.py:225
+msgid "Saving user - synchronizing with Community Server"
+msgstr "Salvataggio utente - sincronizzazione con il Community Server"
+
+#: xr_tour_guide_core/admin/user_admin.py:240
+msgid "No authentication token found"
+msgstr "Nessun token di autenticazione trovato"
+
+#: xr_tour_guide_core/admin/user_admin.py:243
+msgid "Connection error with Community Server: No authentication token"
+msgstr "Errore di connessione con il Community Server: nessun token di autenticazione"
+
+#: xr_tour_guide_core/admin/user_admin.py:263
+msgid "User successfully synchronized with Community Server."
+msgstr "Utente sincronizzato correttamente con il Community Server."
+
+#: xr_tour_guide_core/admin/user_admin.py:270
+#, python-brace-format
+msgid "Error synchronizing with Community Server: {error}"
+msgstr "Errore durante la sincronizzazione con il Community Server: {error}"
+
+#: xr_tour_guide_core/admin/user_admin.py:290
+#, python-brace-format
+msgid "Connection error with Community Server: {error}"
+msgstr "Errore di connessione con il Community Server: {error}"
+
+#: xr_tour_guide_core/admin/waypoint_admin.py:27
+msgid "Point of Interest"
+msgstr "Punto di interesse"
+
+#: xr_tour_guide_core/admin/waypoint_admin.py:28
+msgid "Tour Points of Interest"
+msgstr "Punti di interesse del tour"
+
+#: xr_tour_guide_core/admin/waypoint_admin.py:40
+msgid "📍 Basic Information"
+msgstr "📍 Informazioni di base"
+
+#: xr_tour_guide_core/admin/waypoint_admin.py:46
+msgid "Tip:"
+msgstr "Suggerimento:"
+
+#: xr_tour_guide_core/admin/waypoint_admin.py:47
+msgid ""
+"Start with a clear title and a brief description. You'll add details later."
+msgstr ""
+"Inizia con un titolo chiaro e una breve descrizione. Potrai aggiungere i "
+"dettagli in seguito."
+
+#: xr_tour_guide_core/admin/waypoint_admin.py:51
+msgid "🗺️ Map Location"
+msgstr "🗺️ Posizione sulla mappa"
+
+#: xr_tour_guide_core/admin/waypoint_admin.py:57
+msgid "How to select:"
+msgstr "Come selezionare:"
+
+#: xr_tour_guide_core/admin/waypoint_admin.py:58
+msgid ""
+"Click on the map at the exact point where the location is. You can drag the "
+"marker to adjust its position."
+msgstr ""
+"Fai clic sulla mappa nel punto esatto in cui si trova il luogo. Puoi "
+"trascinare il marcatore per regolarne la posizione."
+
+#: xr_tour_guide_core/admin/waypoint_admin.py:62
+msgid "🖼️ Images"
+msgstr "🖼️ Immagini"
+
+#: xr_tour_guide_core/admin/waypoint_admin.py:69
+msgid "Advice:"
+msgstr "Consiglio:"
+
+#: xr_tour_guide_core/admin/waypoint_admin.py:70
+msgid ""
+"Upload 3-5 good quality images showing the location from different angles. "
+"Photos help visitors recognize the place!"
+msgstr ""
+"Carica 3-5 immagini di buona qualità che mostrino il luogo da diverse "
+"angolazioni. Le foto aiutano i visitatori a riconoscerlo."
+
+#: xr_tour_guide_core/admin/waypoint_admin.py:74
+msgid "🎬 Multimedia Content (Optional)"
+msgstr "🎬 Contenuti multimediali (opzionale)"
+
+#: xr_tour_guide_core/admin/waypoint_admin.py:81
+msgid "Optional but recommended:"
+msgstr "Opzionale ma consigliato:"
+
+#: xr_tour_guide_core/admin/waypoint_admin.py:82
+msgid ""
+"Add extra content to enrich the experience. A PDF with historical info, a "
+"video, or an audio guide make the tour more complete."
+msgstr ""
+"Aggiungi contenuti extra per arricchire l'esperienza. Un PDF con "
+"informazioni storiche, un video o un'audioguida rendono il tour più completo."
+
+#: xr_tour_guide_core/admin/waypoint_admin.py:88
+msgid "🖼️ Image Gallery"
+msgstr "🖼️ Galleria immagini"
+
+#: xr_tour_guide_core/admin/waypoint_admin.py:94
+msgid "Save the point of interest first to upload images"
+msgstr "Salva prima il punto di interesse per caricare le immagini"
+
+#: xr_tour_guide_core/admin/waypoint_admin.py:104
+msgid "No images uploaded yet"
+msgstr "Nessuna immagine caricata"
+
+#: xr_tour_guide_core/admin/waypoint_admin.py:118
+msgid "images uploaded"
+msgstr "immagini caricate"
+
+#: xr_tour_guide_core/admin/waypoint_admin.py:131
+#: xr_tour_guide_core/admin/waypoint_admin.py:219
+msgid "Manage"
+msgstr "Cancella"
+
+#: xr_tour_guide_core/admin/waypoint_admin.py:163
+#: xr_tour_guide_core/admin/waypoint_admin.py:234
+msgid "Click to view image in full screen"
+msgstr "Fai clic per visualizzare l'immagine a schermo intero"
+
+#: xr_tour_guide_core/admin/waypoint_admin.py:180
+msgid "🖼️ Additional Image Gallery"
+msgstr "🖼️ Galleria immagini aggiuntive"
+
+#: xr_tour_guide_core/admin/waypoint_admin.py:186
+msgid "Save the point of interest first to upload additional images"
+msgstr "Salva prima il punto di interesse per caricare le immagini aggiuntive"
+
+#: xr_tour_guide_core/admin/waypoint_admin.py:199
+msgid "No additional images uploaded yet"
+msgstr "Nessuna immagine aggiuntiva caricata"
+
+#: xr_tour_guide_core/admin/waypoint_admin.py:206
+msgid "additional images uploaded"
+msgstr "immagini aggiuntive caricate"
+
+#: xr_tour_guide_core/admin/waypoint_admin.py:284
+msgid "Preview"
+msgstr "Anteprima"
+
+#: xr_tour_guide_core/admin/waypoint_admin.py:291
+msgid "No image"
+msgstr "Nessuna immagine"
+
+#: xr_tour_guide_core/admin/waypoint_admin.py:326
+msgid "🔗 Link Information"
+msgstr "🔗 Informazioni sul link"
+
+#: xr_tour_guide_core/admin/waypoint_admin.py:332
+msgid "Add Link:"
+msgstr "Aggiungi link:"
+
+#: xr_tour_guide_core/admin/waypoint_admin.py:333
+msgid ""
+"Insert external URLs to enrich this point of interest (e.g.: official "
+"website, Wikipedia, YouTube video)"
+msgstr ""
+"Inserisci URL esterni per arricchire questo punto di interesse (es.: sito "
+"ufficiale, Wikipedia, video YouTube)"
+
+#: xr_tour_guide_core/admin/waypoint_admin.py:339
+msgid "🔗 Link"
+msgstr "🔗 Link"
+
+#: xr_tour_guide_core/admin/waypoint_admin.py:347
+msgid "No link"
+msgstr "Nessun link"
+
+#: xr_tour_guide_core/forms/tour_forms.py:29
+msgid "Edit"
+msgstr "Modifica"
+
+#: xr_tour_guide_core/forms/tour_forms.py:52
+msgid "🔗 Internal Tours"
+msgstr "🔗 Tour interni"
+
+#: xr_tour_guide_core/forms/tour_forms.py:53
+msgid "🎯 Tour Title"
+msgstr "🎯 Titolo del tour"
+
+#: xr_tour_guide_core/forms/tour_forms.py:54
+msgid "📌 Subtitle"
+msgstr "📌 Sottotitolo"
+
+#: xr_tour_guide_core/forms/tour_forms.py:55
+msgid "📝 Description"
+msgstr "📝 Descrizione"
+
+#: xr_tour_guide_core/forms/tour_forms.py:56
+msgid "📍 Location"
+msgstr "📍 Luogo"
+
+#: xr_tour_guide_core/forms/tour_forms.py:57
+msgid "🗺️ Map Coordinates"
+msgstr "🗺️ Coordinate sulla mappa"
+
+#: xr_tour_guide_core/forms/tour_forms.py:59
+msgid "🏷️ Category"
+msgstr "🏷️ Categoria"
+
+#: xr_tour_guide_core/forms/tour_forms.py:62
+msgid ""
+"A catchy and clear title (e.g.: \"Historic Center Tour\", \"Journey Through "
+"Art and History\")"
+msgstr ""
+"Un titolo chiaro e coinvolgente (es.: \"Tour del centro storico\", "
+"\"Viaggio tra arte e storia\")"
+
+#: xr_tour_guide_core/forms/tour_forms.py:63
+msgid "A phrase that captures the essence of the tour in a few words"
+msgstr "Una frase che racchiuda l'essenza del tour in poche parole"
+
+#: xr_tour_guide_core/forms/tour_forms.py:64
+msgid ""
+"Complete description: what will be seen, how long it lasts, what makes it "
+"special"
+msgstr ""
+"Descrizione completa: cosa si vedrà, quanto dura e cosa lo rende speciale"
+
+#: xr_tour_guide_core/forms/tour_forms.py:65
+msgid "The main city or area of the tour"
+msgstr "La città o l'area principale del tour"
+
+#: xr_tour_guide_core/forms/tour_forms.py:66
+msgid "A suggestive image that represents the tour"
+msgstr "Un'immagine evocativa che rappresenti il tour"
+
+#: xr_tour_guide_core/forms/tour_forms.py:67
+msgid ""
+"Select internal tours. Click on \"✏️ Edit\" to open and modify each tour."
+msgstr ""
+"Seleziona i tour interni. Fai clic su \"✏️ Modifica\" per aprire e "
+"modificare ciascun tour."
+
+#: xr_tour_guide_core/forms/tour_forms.py:68
+msgid "The type of experience offered"
+msgstr "Il tipo di esperienza offerta"
+
+#: xr_tour_guide_core/forms/tour_forms.py:80
+msgid "E.g.: Historic Center Tour of Rome"
+msgstr "Es.: Tour del centro storico di Roma"
+
+#: xr_tour_guide_core/forms/tour_forms.py:82
+msgid "E.g.: Discovering the most iconic monuments"
+msgstr "Es.: Alla scoperta dei monumenti più iconici"
+
+#: xr_tour_guide_core/forms/tour_forms.py:85
+msgid ""
+"Describe the tour in an engaging way:\n"
+"- What will be seen\n"
+"- Estimated duration\n"
+"- What makes it special\n"
+"- Who it is recommended for"
+msgstr ""
+"Descrivi il tour in modo coinvolgente:\n"
+"- Cosa si vedrà\n"
+"- Durata stimata\n"
+"- Cosa lo rende speciale\n"
+"- A chi è consigliato"
+
+#: xr_tour_guide_core/forms/tour_forms.py:92
+msgid "E.g.: Rome"
+msgstr "Es.: Roma"
+
+#: xr_tour_guide_core/forms/tour_import_form.py:6
+msgid "ZIP archive"
+msgstr "Archivio ZIP"
+
+#: xr_tour_guide_core/forms/tour_import_form.py:10
+msgid "Create imported copy"
+msgstr "Crea una copia importata"
+
+#: xr_tour_guide_core/forms/tour_import_form.py:11
+msgid "If enabled, imported tours will get a safe copied title."
+msgstr ""
+"Se abilitato, ai tour importati verrà assegnato automaticamente un titolo "
+"sicuro come copia."
+
+#: xr_tour_guide_core/forms/tour_import_form.py:37
+msgid "Only ZIP archives are supported"
+msgstr "Sono supportati solo archivi ZIP"
+
+#: xr_tour_guide_core/forms/waypoint_form.py:37
+msgid "📷 Add Images"
+msgstr "📷 Aggiungi immagini"
+
+#: xr_tour_guide_core/forms/waypoint_form.py:39
+msgid "Upload photos that best represent this location"
+msgstr "Carica foto che rappresentino al meglio questo luogo"
+
+#: xr_tour_guide_core/forms/waypoint_form.py:44
+msgid "📷 Add Specific Images for this Waypoint"
+msgstr "📷 Aggiungi immagini specifiche per questo waypoint"
+
+#: xr_tour_guide_core/forms/waypoint_form.py:46
+msgid "Upload photos that best represent this waypoint"
+msgstr "Carica foto che rappresentino al meglio questo waypoint"
+
+#: xr_tour_guide_core/forms/waypoint_form.py:51
+msgid "🔗 Add Links"
+msgstr "🔗 Aggiungi link"
+
+#: xr_tour_guide_core/forms/waypoint_form.py:55
+msgid ""
+"Enter one link per line:\n"
+"\n"
+"https://en.wikipedia.org/wiki/Milan_Cathedral\n"
+"https://www.duomomilano.it\n"
+"https://www.youtube.com/watch?v=example"
+msgstr ""
+"Inserisci un link per riga:\n"
+"\n"
+"https://it.wikipedia.org/wiki/Duomo_di_Milano\n"
+"https://www.duomomilano.it\n"
+"https://www.youtube.com/watch?v=example"
+
+#: xr_tour_guide_core/forms/waypoint_form.py:60
+msgid ""
+"🔗 Enter one link per line. Each line will be saved as a separate link. You "
+"can add official websites, Wikipedia, YouTube videos, etc."
+msgstr ""
+"🔗 Inserisci un link per riga. Ogni riga verrà salvata come link separato. "
+"Puoi aggiungere siti ufficiali, Wikipedia, video YouTube, ecc."
+
+#: xr_tour_guide_core/forms/waypoint_form.py:68
+msgid ""
+"Write the detailed description here using Markdown...\n"
+"\n"
+"**Example:**\n"
+"# Title\n"
+"## Subtitle\n"
+"- Bullet list\n"
+"- Another point\n"
+"\n"
+"Normal text with **bold** and *italic*"
+msgstr ""
+"Scrivi qui la descrizione dettagliata usando Markdown...\n"
+"\n"
+"**Esempio:**\n"
+"# Titolo\n"
+"## Sottotitolo\n"
+"- Elenco puntato\n"
+"- Altro punto\n"
+"\n"
+"Testo normale con **grassetto** e *corsivo*"
+
+#: xr_tour_guide_core/forms/waypoint_form.py:76
+msgid "📝 Detailed Description (Markdown)"
+msgstr "📝 Descrizione dettagliata (Markdown)"
+
+#: xr_tour_guide_core/forms/waypoint_form.py:78
+msgid ""
+"Use Markdown to format the complete description. You can include titles, "
+"lists, bold, italic, etc."
+msgstr ""
+"Usa Markdown per formattare la descrizione completa. Puoi includere titoli, "
+"elenchi, grassetto, corsivo, ecc."
+
+#: xr_tour_guide_core/forms/waypoint_form.py:102
+msgid ""
+"🏛️ The name of this point of interest (e.g.: \"Milan Cathedral\", \"Sforza "
+"Castle\")"
+msgstr ""
+"🏛️ Il nome di questo punto di interesse (es.: \"Duomo di Milano\", "
+"\"Castello Sforzesco\")"
+
+#: xr_tour_guide_core/forms/waypoint_form.py:103
+msgid "E.g.: Milan Cathedral"
+msgstr "Es.: Duomo di Milano"
+
+#: xr_tour_guide_core/forms/waypoint_form.py:106
+msgid "📍 City or location (e.g.: \"Milan\", \"Florence\")"
+msgstr "📍 Città o località (es.: \"Milano\", \"Firenze\")"
+
+#: xr_tour_guide_core/forms/waypoint_form.py:107
+msgid "E.g.: Milan"
+msgstr "Es.: Milano"
+
+#: xr_tour_guide_core/forms/waypoint_form.py:110
+msgid ""
+"✍️ A brief description that will appear in the list of points (max 2-3 lines)"
+msgstr ""
+"✍️ Una breve descrizione che apparirà nell'elenco dei punti (max 2-3 righe)"
+
+#: xr_tour_guide_core/forms/waypoint_form.py:112
+msgid "E.g.: Masterpiece of Gothic architecture, symbol of the city..."
+msgstr "Es.: Capolavoro dell'architettura gotica, simbolo della città..."
+
+#: xr_tour_guide_core/forms/waypoint_form.py:117
+msgid "🗺️ Click on the map to select the exact position of the point"
+msgstr "🗺️ Fai clic sulla mappa per selezionare la posizione esatta del punto"
+
+#: xr_tour_guide_core/forms/waypoint_form.py:120
+msgid "📄 Upload a PDF with additional information (optional)"
+msgstr "📄 Carica un PDF con informazioni aggiuntive (opzionale)"
+
+#: xr_tour_guide_core/forms/waypoint_form.py:123
+msgid "🎥 Upload a descriptive video (optional)"
+msgstr "🎥 Carica un video descrittivo (opzionale)"
+
+#: xr_tour_guide_core/forms/waypoint_form.py:126
+msgid "🎵 Upload an audio guide (optional)"
+msgstr "🎵 Carica un'audioguida (opzionale)"
+
+#: xr_tour_guide_core/models.py:51
+#: xr_tour_guide_public/templates/xr_tour_guide_public/register.html:610
+msgid "City"
+msgstr "Città"
+
+#: xr_tour_guide_core/models.py:52 xr_tour_guide_core/models.py:91
+#: xr_tour_guide_core/models.py:173
+#: xr_tour_guide_public/templates/xr_tour_guide_public/register.html:615
+msgid "Description"
+msgstr "Descrizione"
+
+#: xr_tour_guide_core/models.py:60
+msgid "Ready"
+msgstr "Pronto"
+
+#: xr_tour_guide_core/models.py:61
+msgid "Failed"
+msgstr "Fallito"
+
+#: xr_tour_guide_core/models.py:62
+msgid "Building"
+msgstr "In elaborazione"
+
+#: xr_tour_guide_core/models.py:63
+msgid "Built"
+msgstr "Completato"
+
+#: xr_tour_guide_core/models.py:64
+msgid "Serving"
+msgstr "In distribuzione"
+
+#: xr_tour_guide_core/models.py:65
+msgid "Enqueued"
+msgstr "In coda"
+
+#: xr_tour_guide_core/models.py:68
+msgid "INDOOR"
+msgstr "INTERNO"
+
+#: xr_tour_guide_core/models.py:69
+msgid "OUTDOOR"
+msgstr "ESTERNO"
+
+#: xr_tour_guide_core/models.py:70
+msgid "GUIDE"
+msgstr "GUIDA"
+
+#: xr_tour_guide_core/models.py:71
+msgid "Mixed"
+msgstr "Misto"
+
+#: xr_tour_guide_core/models.py:80 xr_tour_guide_core/models.py:169
+msgid "Title"
+msgstr "Titolo"
+
+#: xr_tour_guide_core/models.py:81
+msgid "Subtitle"
+msgstr "Sottotitolo"
+
+#: xr_tour_guide_core/models.py:82 xr_tour_guide_core/models.py:170
+msgid "Place"
+msgstr "Luogo"
+
+#: xr_tour_guide_core/models.py:83 xr_tour_guide_core/models.py:171
+msgid "Coordinates"
+msgstr "Coordinate"
+
+#: xr_tour_guide_core/models.py:90
+msgid "Default Image"
+msgstr "Immagine predefinita"
+
+#: xr_tour_guide_core/models.py:93
+msgid "Created At"
+msgstr "Creato il"
+
+#: xr_tour_guide_core/models.py:94 xr_tour_guide_core/models.py:178
+msgid "Build Started At"
+msgstr "Build avviata il"
+
+#: xr_tour_guide_core/models.py:95 xr_tour_guide_core/models.py:270
+msgid "User"
+msgstr "Utente"
+
+#: xr_tour_guide_core/models.py:96
+msgid "Creation Time"
+msgstr "Data di creazione"
+
+#: xr_tour_guide_core/models.py:103
+msgid "Total Views"
+msgstr "Visualizzazioni totali"
+
+#: xr_tour_guide_core/models.py:104
+msgid "Last Edited"
+msgstr "Ultima modifica"
+
+#: xr_tour_guide_core/models.py:105
+msgid "Internal Tour"
+msgstr "Tour interno"
+
+#: xr_tour_guide_core/models.py:106
+msgid "Is Subtour"
+msgstr "È un sottotour"
+
+#: xr_tour_guide_core/models.py:107
+msgid "reports"
+msgstr "segnalazioni"
+
+#: xr_tour_guide_core/models.py:174
+msgid "Model Path"
+msgstr "Percorso modello"
+
+#: xr_tour_guide_core/models.py:175
+msgid "Position"
+msgstr "Posizione"
+
+#: xr_tour_guide_core/models.py:177 xr_tour_guide_core/models.py:273
+msgid "Timestamp"
+msgstr "Timestamp"
+
+#: xr_tour_guide_core/models.py:180
+msgid "PDF Item"
+msgstr "Elemento PDF"
+
+#: xr_tour_guide_core/models.py:181
+msgid "Readme Item"
+msgstr "Elemento readme"
+
+#: xr_tour_guide_core/models.py:182
+msgid "Video Item"
+msgstr "Elemento video"
+
+#: xr_tour_guide_core/models.py:183
+msgid "Audio Item"
+msgstr "Elemento audio"
+
+#: xr_tour_guide_core/models.py:234 xr_tour_guide_core/models.py:246
+#: xr_tour_guide_core/models.py:258
+msgid "Waypoint"
+msgstr "Waypoint"
+
+#: xr_tour_guide_core/models.py:242
+msgid "Default"
+msgstr "Predefinito"
+
+#: xr_tour_guide_core/models.py:243
+msgid "Additional Images"
+msgstr "Immagini aggiuntive"
+
+#: xr_tour_guide_core/models.py:247
+msgid "Image"
+msgstr "Immagine"
+
+#: xr_tour_guide_core/models.py:248
+msgid "Type of Images"
+msgstr "Tipo di immagini"
+
+#: xr_tour_guide_core/models.py:251
+msgid "Waypoint View Image"
+msgstr "Immagine del waypoint"
+
+#: xr_tour_guide_core/models.py:252
+msgid "Waypoint View Images"
+msgstr "Immagini del waypoint"
+
+#: xr_tour_guide_core/models.py:259
+msgid "Link"
+msgstr "Link"
+
+#: xr_tour_guide_core/models.py:262
+msgid "Waypoint View Link"
+msgstr "Link del waypoint"
+
+#: xr_tour_guide_core/models.py:263
+msgid "Waypoint View Links"
+msgstr "Link del waypoint"
+
+#: xr_tour_guide_core/models.py:272
+msgid "Comment"
+msgstr "Commento"
+
+#: xr_tour_guide_core/models.py:276
+msgid "Review"
+msgstr "Recensione"
+
+#: xr_tour_guide_public/templates/xr_tour_guide_public/landing_page/landing_page.html:1387
+#: xr_tour_guide_public/templates/xr_tour_guide_public/landing_page/landing_page.html:1424
+msgid "The Challenge"
+msgstr "La sfida"
+
+#: xr_tour_guide_public/templates/xr_tour_guide_public/landing_page/landing_page.html:1388
+#: xr_tour_guide_public/templates/xr_tour_guide_public/landing_page/landing_page.html:1425
+#: xr_tour_guide_public/templates/xr_tour_guide_public/landing_page/landing_page.html:1537
+msgid "Our Solution"
+msgstr "La nostra soluzione"
+
+#: xr_tour_guide_public/templates/xr_tour_guide_public/landing_page/landing_page.html:1389
+#: xr_tour_guide_public/templates/xr_tour_guide_public/landing_page/landing_page.html:1426
+msgid "Features"
+msgstr "Funzionalità"
+
+#: xr_tour_guide_public/templates/xr_tour_guide_public/landing_page/landing_page.html:1390
+#: xr_tour_guide_public/templates/xr_tour_guide_public/landing_page/landing_page.html:1427
+msgid "Use Cases"
+msgstr "Casi d'uso"
+
+#: xr_tour_guide_public/templates/xr_tour_guide_public/landing_page/landing_page.html:1411
+msgid "Log In"
+msgstr "Accedi"
+
+msgid "Log out"
+msgstr "Logout"
+
+msgid "Log Out"
+msgstr "Logout"
+
+msgid "Logout"
+msgstr "Logout"
+
+#: xr_tour_guide_public/templates/xr_tour_guide_public/landing_page/landing_page.html:1412
+#: xr_tour_guide_public/templates/xr_tour_guide_public/landing_page/landing_page.html:1449
+#: xr_tour_guide_public/templates/xr_tour_guide_public/register.html:623
+#: xr_tour_guide_public/templates/xr_tour_guide_public/register.html:674
+msgid "Register"
+msgstr "Registrati"
+
+#: xr_tour_guide_public/templates/xr_tour_guide_public/landing_page/landing_page.html:1457
+msgid "XR Experiences for Rural Communities"
+msgstr "Esperienze XR per le comunità rurali"
+
+#: xr_tour_guide_public/templates/xr_tour_guide_public/landing_page/landing_page.html:1458
+msgid "Guiding Real-Life Experiences"
+msgstr "Guidare esperienze reali"
+
+#: xr_tour_guide_public/templates/xr_tour_guide_public/landing_page/landing_page.html:1460
+msgid ""
+"Enriching reality with immersive media insights using Extended Reality (XR) "
+"and Artificial Intelligence (AI) to empower rural communities through "
+"community-driven XR content."
+msgstr ""
+"Arricchire la realtà con contenuti immersivi attraverso la Realtà Estesa (XR) "
+"e l'Intelligenza Artificiale (AI), valorizzando le comunità rurali tramite "
+"contenuti XR creati dalla comunità."
+
+#: xr_tour_guide_public/templates/xr_tour_guide_public/landing_page/landing_page.html:1463
+msgid "Discover How"
+msgstr "Scopri come"
+
+#: xr_tour_guide_public/templates/xr_tour_guide_public/landing_page/landing_page.html:1464
+msgid "Learn More"
+msgstr "Scopri di più"
+
+#: xr_tour_guide_public/templates/xr_tour_guide_public/landing_page/landing_page.html:1494
+msgid "Understanding the Problem"
+msgstr "Comprendere il problema"
+
+#: xr_tour_guide_public/templates/xr_tour_guide_public/landing_page/landing_page.html:1495
+msgid "The Challenge in Rural Areas"
+msgstr "La sfida nelle aree rurali"
+
+#: xr_tour_guide_public/templates/xr_tour_guide_public/landing_page/landing_page.html:1497
+msgid ""
+"Many regions rich in cultural heritage face significant hurdles that limit "
+"tourism, community involvement, and local opportunities."
+msgstr ""
+"Molti territori ricchi di patrimonio culturale affrontano ostacoli rilevanti "
+"che limitano il turismo, il coinvolgimento della comunità e le opportunità locali."
+
+#: xr_tour_guide_public/templates/xr_tour_guide_public/landing_page/landing_page.html:1503
+msgid "Access Difficulties"
+msgstr "Difficoltà di accesso"
+
+#: xr_tour_guide_public/templates/xr_tour_guide_public/landing_page/landing_page.html:1505
+msgid ""
+"Cultural sites in many rural areas struggle to remain open and accessible. "
+"Chronic staff shortages make it hard to keep museums and historical "
+"buildings operating, while minimal or deteriorating infrastructure further "
+"discourages attendance."
+msgstr ""
+"I siti culturali di molte aree rurali faticano a restare aperti e accessibili. "
+"La cronica carenza di personale rende difficile mantenere operativi musei e "
+"edifici storici, mentre infrastrutture scarse o deteriorate scoraggiano "
+"ulteriormente le visite."
+
+#: xr_tour_guide_public/templates/xr_tour_guide_public/landing_page/landing_page.html:1510
+msgid "Insufficient Essential Services"
+msgstr "Servizi essenziali insufficienti"
+
+#: xr_tour_guide_public/templates/xr_tour_guide_public/landing_page/landing_page.html:1512
+msgid ""
+"Basic visitor amenities—such as restrooms, seating, shelter, and refreshments"
+"—are often missing or in disrepair in village centers. Without these "
+"fundamental comforts, tourists are less inclined to stay and explore."
+msgstr ""
+"I servizi essenziali per i visitatori—come bagni, posti a sedere, ripari e "
+"punti ristoro—sono spesso assenti o in cattivo stato nei centri rurali. "
+"Senza questi comfort fondamentali, i turisti sono meno propensi a fermarsi ed esplorare."
+
+#: xr_tour_guide_public/templates/xr_tour_guide_public/landing_page/landing_page.html:1517
+msgid "Low Visibility & Weak Regional Identity"
+msgstr "Scarsa visibilità e debole identità territoriale"
+
+#: xr_tour_guide_public/templates/xr_tour_guide_public/landing_page/landing_page.html:1519
+msgid ""
+"These communities frequently lack strong branding or promotional efforts. As "
+"a result, the area remains \\"
+msgstr ""
+"Queste comunità spesso non dispongono di un'identità forte o di adeguate "
+"attività promozionali. Di conseguenza, il territorio resta poco conosciuto."
+
+#: xr_tour_guide_public/templates/xr_tour_guide_public/landing_page/landing_page.html:1524
+msgid "Poor Dissemination of Local Information"
+msgstr "Scarsa diffusione delle informazioni locali"
+
+#: xr_tour_guide_public/templates/xr_tour_guide_public/landing_page/landing_page.html:1526
+msgid ""
+"Even when interesting sites exist, details about their history, "
+"significance, and practical visiting tips are hard to find. Limited "
+"distribution channels and fragmented information hinder awareness of what "
+"the territory has to offer."
+msgstr ""
+"Anche quando esistono siti di interesse, le informazioni sulla loro storia, "
+"sul loro valore e sui suggerimenti pratici per visitarli sono difficili da "
+"reperire. Canali di diffusione limitati e informazioni frammentate ostacolano "
+"la conoscenza di ciò che il territorio ha da offrire."
+
+#: xr_tour_guide_public/templates/xr_tour_guide_public/landing_page/landing_page.html:1538
+msgid "XRTourGuide Platform"
+msgstr "Piattaforma XRTourGuide"
+
+#: xr_tour_guide_public/templates/xr_tour_guide_public/landing_page/landing_page.html:1540
+msgid ""
+"An online platform empowering communities to create and share immersive XR "
+"virtual tours, enhancing real-world exploration."
+msgstr ""
+"Una piattaforma online che consente alle comunità di creare e condividere "
+"tour virtuali XR immersivi, arricchendo l'esplorazione del mondo reale."
+
+#: xr_tour_guide_public/templates/xr_tour_guide_public/landing_page/landing_page.html:1546
+msgid "Authoring Platform"
+msgstr "Piattaforma di authoring"
+
+#: xr_tour_guide_public/templates/xr_tour_guide_public/landing_page/landing_page.html:1548
+msgid ""
+"A web-based tool allowing users (citizens, organizations) to easily create "
+"XR tours with text, images, audio, and video."
+msgstr ""
+"Uno strumento web che permette agli utenti (cittadini, associazioni, enti) "
+"di creare facilmente tour XR con testi, immagini, audio e video."
+
+#: xr_tour_guide_public/templates/xr_tour_guide_public/landing_page/landing_page.html:1553
+msgid "Mobile Application"
+msgstr "Applicazione mobile"
+
+#: xr_tour_guide_public/templates/xr_tour_guide_public/landing_page/landing_page.html:1555
+msgid ""
+"A multi-platform app for users to discover and experience tours. Point your "
+"phone at objects to unlock rich media insights."
+msgstr ""
+"Un'app multipiattaforma che consente agli utenti di scoprire e vivere i tour. "
+"Inquadra gli oggetti con il telefono per sbloccare contenuti multimediali contestuali."
+
+#: xr_tour_guide_public/templates/xr_tour_guide_public/landing_page/landing_page.html:1560
+msgid "Community Co-Creation"
+msgstr "Co-creazione con la comunità"
+
+#: xr_tour_guide_public/templates/xr_tour_guide_public/landing_page/landing_page.html:1562
+msgid ""
+"Developed in collaboration with rural communities through the Active Rural "
+"Community Working Group (ARCO-WG)."
+msgstr ""
+"Sviluppato in collaborazione con le comunità rurali attraverso l'Active Rural "
+"Community Working Group (ARCO-WG)."
+
+#: xr_tour_guide_public/templates/xr_tour_guide_public/landing_page/landing_page.html:1573
+msgid "Key Features"
+msgstr "Funzionalità principali"
+
+#: xr_tour_guide_public/templates/xr_tour_guide_public/landing_page/landing_page.html:1574
+msgid "Cutting-Edge Technology"
+msgstr "Tecnologia all'avanguardia"
+
+#: xr_tour_guide_public/templates/xr_tour_guide_public/landing_page/landing_page.html:1576
+msgid ""
+"Leveraging advanced technology for engaging and immersive cultural "
+"experiences."
+msgstr ""
+"Sfrutta tecnologie avanzate per offrire esperienze culturali coinvolgenti e immersive."
+
+#: xr_tour_guide_public/templates/xr_tour_guide_public/landing_page/landing_page.html:1582
+msgid "Extended Reality (XR)"
+msgstr "Realtà estesa (XR)"
+
+#: xr_tour_guide_public/templates/xr_tour_guide_public/landing_page/landing_page.html:1584
+msgid ""
+"Augmenting real-world views with interactive digital content, blending "
+"physical and virtual experiences seamlessly."
+msgstr ""
+"Arricchisce la visione del mondo reale con contenuti digitali interattivi, "
+"integrando in modo fluido esperienze fisiche e virtuali."
+
+#: xr_tour_guide_public/templates/xr_tour_guide_public/landing_page/landing_page.html:1589
+msgid "AI-Powered Recognition"
+msgstr "Riconoscimento basato su AI"
+
+#: xr_tour_guide_public/templates/xr_tour_guide_public/landing_page/landing_page.html:1591
+msgid ""
+"Visual Tagging module identifies objects (art, buildings, nature) to trigger "
+"relevant content automatically."
+msgstr ""
+"Il modulo di riconoscimento visivo identifica oggetti (arte, edifici, natura) "
+"per attivare automaticamente i contenuti pertinenti."
+
+#: xr_tour_guide_public/templates/xr_tour_guide_public/landing_page/landing_page.html:1596
+msgid "Multimodal Content"
+msgstr "Contenuti multimodali"
+
+#: xr_tour_guide_public/templates/xr_tour_guide_public/landing_page/landing_page.html:1598
+msgid ""
+"Supports text, audio, video, and images, engaging insights that bring "
+"heritage to life."
+msgstr ""
+"Supporta testi, audio, video e immagini, offrendo contenuti coinvolgenti che "
+"danno vita al patrimonio culturale."
+
+#: xr_tour_guide_public/templates/xr_tour_guide_public/landing_page/landing_page.html:1603
+msgid "Cloud-Native Platform"
+msgstr "Piattaforma cloud-native"
+
+#: xr_tour_guide_public/templates/xr_tour_guide_public/landing_page/landing_page.html:1605
+msgid ""
+"Scalable and accessible web-based authoring tool that works from anywhere, "
+"ensuring maximum reach and flexibility."
+msgstr ""
+"Strumento di authoring web scalabile e accessibile ovunque, che garantisce "
+"massima diffusione e flessibilità."
+
+#: xr_tour_guide_public/templates/xr_tour_guide_public/landing_page/landing_page.html:1610
+msgid "Gamification Elements"
+msgstr "Elementi di gamification"
+
+#: xr_tour_guide_public/templates/xr_tour_guide_public/landing_page/landing_page.html:1612
+msgid ""
+"Encouraging user engagement and social sharing within the mobile app through "
+"interactive challenges and rewards."
+msgstr ""
+"Favorisce il coinvolgimento degli utenti e la condivisione sociale nell'app "
+"mobile tramite sfide interattive e ricompense."
+
+#: xr_tour_guide_public/templates/xr_tour_guide_public/landing_page/landing_page.html:1617
+msgid "Multi-Language Support"
+msgstr "Supporto multilingua"
+
+#: xr_tour_guide_public/templates/xr_tour_guide_public/landing_page/landing_page.html:1619
+msgid ""
+"Making tours accessible to a wider, international audience with "
+"comprehensive language localization."
+msgstr ""
+"Rende i tour accessibili a un pubblico più ampio e internazionale grazie a "
+"una localizzazione completa dei contenuti."
+
+#: xr_tour_guide_public/templates/xr_tour_guide_public/landing_page/landing_page.html:1630
+msgid "Example Use Cases"
+msgstr "Esempi di casi d'uso"
+
+#: xr_tour_guide_public/templates/xr_tour_guide_public/landing_page/landing_page.html:1631
+msgid "XRTourGuide in Action"
+msgstr "XRTourGuide in azione"
+
+#: xr_tour_guide_public/templates/xr_tour_guide_public/landing_page/landing_page.html:1633
+msgid ""
+"Demonstrating the versatility of XRTourGuide in the pilot region (Bussento, "
+"Lambro, Mingardo)."
+msgstr ""
+"Dimostra la versatilità di XRTourGuide nell'area pilota (Bussento, Lambro, Mingardo)."
+
+#: xr_tour_guide_public/templates/xr_tour_guide_public/landing_page/landing_page.html:1655
+msgid "Nilus Trail"
+msgstr "Cammino di San Nilo"
+
+#: xr_tour_guide_public/templates/xr_tour_guide_public/landing_page/landing_page.html:1656
+msgid ""
+"Highlighting the historical route of Saint Nilus, increasing awareness of "
+"art, nature, and faith landmarks in the Byzantine Cilento (UNESCO site)."
+msgstr ""
+"Valorizza il percorso storico di San Nilo, aumentando la conoscenza dei luoghi "
+"di arte, natura e fede del Cilento bizantino (sito UNESCO)."
+
+#: xr_tour_guide_public/templates/xr_tour_guide_public/landing_page/landing_page.html:1676
+msgid "Morigerati Heritage"
+msgstr "Museo di Morigerati"
+
+#: xr_tour_guide_public/templates/xr_tour_guide_public/landing_page/landing_page.html:1677
+msgid ""
+"Showcasing the Ethnographic Museum's collection, emphasizing local "
+"traditions and targeting diverse audiences."
+msgstr ""
+"Valorizza la collezione del Museo Etnografico, mettendo in evidenza le "
+"tradizioni locali e rivolgendosi a pubblici diversi."
+
+#: xr_tour_guide_public/templates/xr_tour_guide_public/landing_page/landing_page.html:1697
+msgid "MushroomMate"
+msgstr "MushroomMate"
+
+#: xr_tour_guide_public/templates/xr_tour_guide_public/landing_page/landing_page.html:1614
+msgid "Explore local products around you, reveal origin and producer stories, get tasting tips, and visit purchase options."
+msgstr "Scopri i prodotti locali della tua zona, scopri le storie delle loro origini e dei loro produttori, ricevi consigli per la degustazione e scopri dove acquistarli."
+
+#: xr_tour_guide_public/templates/xr_tour_guide_public/landing_page/landing_page.html:1719
+msgid "Expected Impact"
+msgstr "Impatto atteso"
+
+#: xr_tour_guide_public/templates/xr_tour_guide_public/landing_page/landing_page.html:1720
+msgid "Creating Value"
+msgstr "Creare valore"
+
+#: xr_tour_guide_public/templates/xr_tour_guide_public/landing_page/landing_page.html:1722
+msgid ""
+"Generating social and economic value by leveraging local knowledge and "
+"assets."
+msgstr ""
+"Generare valore sociale ed economico facendo leva sulle conoscenze e sulle "
+"risorse locali."
+
+#: xr_tour_guide_public/templates/xr_tour_guide_public/landing_page/landing_page.html:1728
+msgid "Boost Tourism"
+msgstr "Rafforzare il turismo"
+
+#: xr_tour_guide_public/templates/xr_tour_guide_public/landing_page/landing_page.html:1730
+msgid "Increase visitor flow year-round by offering new, engaging tours."
+msgstr "Aumentare il flusso di visitatori durante tutto l'anno offrendo nuovi tour coinvolgenti."
+
+#: xr_tour_guide_public/templates/xr_tour_guide_public/landing_page/landing_page.html:1735
+msgid "Engage Community"
+msgstr "Coinvolgere la comunità"
+
+#: xr_tour_guide_public/templates/xr_tour_guide_public/landing_page/landing_page.html:1737
+msgid "Raise cultural awareness and encourage citizen participation."
+msgstr "Aumentare la consapevolezza culturale e incoraggiare la partecipazione dei cittadini."
+
+#: xr_tour_guide_public/templates/xr_tour_guide_public/landing_page/landing_page.html:1742
+msgid "Stimulate Economy"
+msgstr "Stimolare l'economia"
+
+#: xr_tour_guide_public/templates/xr_tour_guide_public/landing_page/landing_page.html:1744
+msgid "Generate local job opportunities in content creation and tourism."
+msgstr "Generare opportunità di lavoro locali nella creazione di contenuti e nel turismo."
+
+#: xr_tour_guide_public/templates/xr_tour_guide_public/landing_page/landing_page.html:1749
+msgid "Promote Sustainability"
+msgstr "Promuovere la sostenibilità"
+
+#: xr_tour_guide_public/templates/xr_tour_guide_public/landing_page/landing_page.html:1751
+msgid "Support sustainable tourism and preserve cultural heritage."
+msgstr "Sostenere un turismo sostenibile e preservare il patrimonio culturale."
+
+#: xr_tour_guide_public/templates/xr_tour_guide_public/landing_page/landing_page.html:1761
+msgid "Get Involved"
+msgstr "Partecipa"
+
+#: xr_tour_guide_public/templates/xr_tour_guide_public/landing_page/landing_page.html:1762
+msgid "Join the XRTourGuide Community"
+msgstr "Unisciti alla community di XRTourGuide"
+
+#: xr_tour_guide_public/templates/xr_tour_guide_public/landing_page/landing_page.html:1764
+msgid ""
+"XRTourGuide is currently under development within the FUTURAL project. "
+"Follow our progress and discover how XR can transform rural tourism."
+msgstr ""
+"XRTourGuide è attualmente in fase di sviluppo all'interno del progetto FUTURAL. "
+"Segui i nostri progressi e scopri come la XR può trasformare il turismo rurale."
+
+#: xr_tour_guide_public/templates/xr_tour_guide_public/landing_page/landing_page.html:1767
+msgid "Create an Account"
+msgstr "Crea un account"
+
+#: xr_tour_guide_public/templates/xr_tour_guide_public/landing_page/landing_page.html:1777
+msgid ""
+"Part of the FUTURAL project, empowering the future through innovative smart "
+"solutions for rural areas."
+msgstr ""
+"Parte del progetto FUTURAL, che costruisce il futuro attraverso soluzioni "
+"smart innovative per le aree rurali."
+
+#: xr_tour_guide_public/templates/xr_tour_guide_public/landing_page/landing_page.html:1778
+msgid "All rights reserved."
+msgstr "Tutti i diritti riservati."
+
+#: xr_tour_guide_public/templates/xr_tour_guide_public/register.html:572
+msgid "Create Account"
+msgstr "Crea account"
+
+#: xr_tour_guide_public/templates/xr_tour_guide_public/register.html:573
+msgid "Join us and start your journey"
+msgstr "Unisciti a noi e inizia il tuo percorso"
+
+#: xr_tour_guide_public/templates/xr_tour_guide_public/register.html:583
+msgid "First Name"
+msgstr "Nome"
+
+#: xr_tour_guide_public/templates/xr_tour_guide_public/register.html:584
+msgid "John"
+msgstr "Mario"
+
+#: xr_tour_guide_public/templates/xr_tour_guide_public/register.html:588
+msgid "Last Name"
+msgstr "Cognome"
+
+#: xr_tour_guide_public/templates/xr_tour_guide_public/register.html:589
+msgid "Doe"
+msgstr "Rossi"
+
+#: xr_tour_guide_public/templates/xr_tour_guide_public/register.html:594
+msgid "Username"
+msgstr "Nome utente"
+
+#: xr_tour_guide_public/templates/xr_tour_guide_public/register.html:595
+msgid "johndoe"
+msgstr "mariorossi"
+
+#: xr_tour_guide_public/templates/xr_tour_guide_public/register.html:606
+#: xr_tour_guide_public/templates/xr_tour_guide_public/register.html:671
+msgid "Show"
+msgstr "Mostra"
+
+#: xr_tour_guide_public/templates/xr_tour_guide_public/register.html:611
+msgid "Your city"
+msgstr "La tua città"
+
+#: xr_tour_guide_public/templates/xr_tour_guide_public/register.html:616
+msgid "Tell us about yourself..."
+msgstr "Parlaci di te..."
+
+#: xr_tour_guide_public/templates/xr_tour_guide_public/register.html:619
+msgid "Required fields"
+msgstr "Campi obbligatori"
+
+#: xr_tour_guide_public/templates/xr_tour_guide_public/register.html:629
+msgid "Already have an account?"
+msgstr "Hai già un account?"
+
+#: xr_tour_guide_public/templates/xr_tour_guide_public/register.html:672
+msgid "Hide"
+msgstr "Nascondi"
+
+#: xr_tour_guide_public/templates/xr_tour_guide_public/register.html:673
+msgid "Registering..."
+msgstr "Registrazione in corso..."
+
+#: xr_tour_guide_public/templates/xr_tour_guide_public/register.html:675
+msgid "Email sent successfully! Registration in progress..."
+msgstr "Email inviata con successo! Registrazione in corso..."
+
+#: xr_tour_guide_public/templates/xr_tour_guide_public/register.html:685
+msgid "Too many requests. Please wait before trying again."
+msgstr "Troppe richieste. Attendi prima di riprovare."
+
+msgid "Acknowledgements"
+msgstr "Ringraziamenti"
+
+msgid "We would like to thank the people, institutions, and communities that contributed to the development of XRTourGuide."
+msgstr "Desideriamo ringraziare le persone, le istituzioni e le comunità che hanno contribuito allo sviluppo di XRTourGuide."
+
+msgid "Local Communities"
+msgstr "Comunità locali"
+
+msgid "We thank the local communities for their participation, feedback, and continuous support throughout the co-creation process."
+msgstr "Ringraziamo le comunità locali per la partecipazione, i feedback e il supporto continuo durante tutto il processo di co-creazione."
+
+msgid "Cultural Institutions"
+msgstr "Istituzioni culturali"
+
+msgid "We acknowledge the museums, associations, and cultural organizations that shared knowledge, materials, and expertise."
+msgstr "Ringraziamo i musei, le associazioni e le organizzazioni culturali che hanno condiviso conoscenze, materiali e competenze."
+
+msgid "Research and Innovation Partners"
+msgstr "Partner di ricerca e innovazione"
+
+msgid "We thank the research teams and innovation partners who contributed to the design, development, and validation of the platform."
+msgstr "Ringraziamo i gruppi di ricerca e i partner per l'innovazione che hanno contribuito alla progettazione, allo sviluppo e alla validazione della piattaforma."
+
+msgid "FUTURAL Project"
+msgstr "Progetto FUTURAL"
+
+msgid "This work has been developed within the FUTURAL project, which supports innovation and smart solutions for rural areas."
+msgstr "Questo lavoro è stato sviluppato nell'ambito del progetto FUTURAL, che sostiene l'innovazione e le soluzioni smart per le aree rurali."
+
+msgid "LocalProducts"
+msgstr "Prodotti Locali"
+
+msgid "FUTURAL Logo"
+msgstr "Logo FUTURAL"
+
+msgid "Co-funded by the European Union."
+msgstr "Cofinanziato dall'Unione europea."
+
+msgid "Views and opinions expressed are however those of the author(s) only and do not necessarily reflect those of the European Union or European Research Executive Agency. Neither the European Union nor the granting authority can be held responsible for them."
+msgstr "Le opinioni e i punti di vista espressi sono tuttavia esclusivamente quelli degli autori e non riflettono necessariamente quelli dell'Unione europea o dell'Agenzia esecutiva europea per la ricerca. Né l'Unione europea né l'autorità concedente possono esserne ritenute responsabili."
+
+msgid "XRTourGuide is part of the FUTURAL project, empowering the future through innovative smart solutions for rural areas."
+msgstr "XRTourGuide fa parte del progetto FUTURAL, che punta a dare slancio al futuro attraverso soluzioni intelligenti e innovative per le aree rurali." 
+
+msgid "Contacts"
+msgstr "Contatti"

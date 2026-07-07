@@ -17,7 +17,7 @@ class ClickableCheckboxSelectMultiple(forms.CheckboxSelectMultiple):
         option = super().create_option(name, value, label, selected, index, subindex, attrs)
         
         if value:
-            print(f"VALUE: {value}", flush=True)
+            # print(f"VALUE: {value}", flush=True)
             change_url = reverse(f'admin:{self.app_label}_{self.model_name}_change', args=[value])
             
             original_label = option['label']
@@ -33,7 +33,7 @@ class ClickableCheckboxSelectMultiple(forms.CheckboxSelectMultiple):
     
     class Media:
         css = {
-            'all': ['admin/css/clickable_checkboxes.css']
+            # 'all': ['admin/css/clickable_checkboxes.css']
         }
 
 class TourForm(forms.ModelForm):
@@ -57,6 +57,7 @@ class TourForm(forms.ModelForm):
             'coordinates': _('🗺️ Map Coordinates'),
             'default_image': _('🖼️ Cover Image'),
             'category': _('🏷️ Category'),
+            'language': _('🌐 Language'),
         }
         help_texts = {
             'title': _('A catchy and clear title (e.g.: "Historic Center Tour", "Journey Through Art and History")'),
@@ -66,6 +67,7 @@ class TourForm(forms.ModelForm):
             'default_image': _('A suggestive image that represents the tour'),
             'sub_tours': _('Select internal tours. Click on "✏️ Edit" to open and modify each tour.'),
             'category': _('The type of experience offered'),
+            'language': _('The language of the tour'),
         }
 
     def __init__(self, *args, **kwargs):
@@ -92,7 +94,7 @@ class TourForm(forms.ModelForm):
             self.fields['place'].widget.attrs['placeholder'] = _('E.g.: Rome')
 
         if request and "_popup" in request.GET and not self.instance.pk:
-            self.fields['category'].initial = 'INSIDE'
+            self.fields['category'].initial = 'INDOOR'
             self.fields['category'].disabled = True
             self.fields['category'].widget = forms.HiddenInput()
             self.fields['is_subtour'].initial = True

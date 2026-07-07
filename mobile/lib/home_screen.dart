@@ -3,7 +3,6 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
-import 'package:dio/dio.dart';
 import 'main.dart';
 import 'models/app_colors.dart';
 import 'elements/travel_list_item_card.dart';
@@ -11,8 +10,6 @@ import 'tour_details_page.dart';
 import "category_detail_screen.dart";
 import "search_screen.dart";
 import 'user_details.dart';
-import 'models/tour.dart';
-import 'models/category.dart';
 import 'services/tour_service.dart';
 import 'services/offline_tour_service.dart';
 import 'package:flutter/widgets.dart';
@@ -21,6 +18,9 @@ import "package:easy_localization/easy_localization.dart";
 import "elements/zlib_image.dart";
 import 'package:geolocator/geolocator.dart';
 import 'providers/home_providers.dart'; // Importa i nuovi provider
+import 'services/analytics_service.dart';
+import 'utils/responsive.dart';
+import 'utils/platform_page_route.dart';
 
 class TravelExplorerScreen extends ConsumerStatefulWidget {
   final bool isGuest;
@@ -37,6 +37,7 @@ class _TravelExplorerScreenState extends ConsumerState<TravelExplorerScreen>
     with RouteAware {
   late TourService _tourService;
   late OfflineStorageService _offlineService;
+  late AnalyticsService _analytics;
 
   // State for offline data (local state is fine for offline as it's fast)
   List<Map<String, dynamic>> _offlineTours = [];
@@ -52,6 +53,7 @@ class _TravelExplorerScreenState extends ConsumerState<TravelExplorerScreen>
     super.initState();
     _tourService = ref.read(tourServiceProvider);
     _offlineService = ref.read(offlineStorageServiceProvider);
+    _analytics = ref.read(analyticsServiceProvider);
 
     _checkInitialConnectivity();
     _connectivitySubscription = Connectivity().onConnectivityChanged.listen(
@@ -80,12 +82,13 @@ class _TravelExplorerScreenState extends ConsumerState<TravelExplorerScreen>
     // 2. If device is connected, check server reachability
     bool serverReachable = false;
     if (deviceConnected) {
-      // print("CHECKING SERVER REACHABILITY");
-      serverReachable = await _checkServerReachability();
+      // debugPrint("CHECKING SERVER REACHABILITY");
+      serverReachable = true;
+      // serverReachable = await _checkServerReachability();
     }
 
     final isNowOnline = deviceConnected && serverReachable;
-    // print("ONLINE?: ${isNowOnline}");
+    // debugPrint("ONLINE?: ${isNowOnline}");
 
     if (mounted) {
       setState(() {
@@ -135,19 +138,22 @@ class _TravelExplorerScreenState extends ConsumerState<TravelExplorerScreen>
   Future<void> _loadOnlineData({bool forceRefresh = false}) async {
     if (!_isOnline) return;
 
+    final language = context.locale.languageCode.toLowerCase();
+
     // Carica categorie (il provider gestisce il caching se non invalidato)
     if (forceRefresh) {
       ref.refresh(categoriesProvider);
     }
 
     // Carica tour
+    debugPrint("Loading online tours with forceRefresh=$forceRefresh, language=$language");
     Position? position = await _getCurrentPosition();
-    ref
-        .read(nearbyToursProvider.notifier)
+    ref.read(nearbyToursProvider.notifier)
         .loadTours(
           forceRefresh: forceRefresh,
           lat: position?.latitude,
           lon: position?.longitude,
+          language: language
         );
   }
 
@@ -183,7 +189,8 @@ class _TravelExplorerScreenState extends ConsumerState<TravelExplorerScreen>
   }
 
   Future<void> _loadOfflineTours() async {
-    if (_offlineTours.isEmpty && mounted) setState(() => _isLoadingOfflineTours = true);
+    if (_offlineTours.isEmpty && mounted)
+      setState(() => _isLoadingOfflineTours = true);
     try {
       final tours = await _offlineService.getOfflineTours();
       if (mounted) setState(() => _offlineTours = tours);
@@ -214,7 +221,7 @@ class _TravelExplorerScreenState extends ConsumerState<TravelExplorerScreen>
         title: Text(
           "XRTOURGUIDE",
           style: TextStyle(
-            fontSize: MediaQuery.of(context).size.width * 0.06,
+            fontSize: context.r.sp(24),
             fontWeight: FontWeight.bold,
             fontFamily: "point_panther",
           ),
@@ -247,7 +254,7 @@ class _TravelExplorerScreenState extends ConsumerState<TravelExplorerScreen>
         onTap: (int index) {
           if (index == 1) {
             Navigator.of(context).push(
-              MaterialPageRoute(
+              platformPageRoute(
                 builder:
                     (context) => UserDetailScreen(
                       isGuest: widget.isGuest,
@@ -307,9 +314,9 @@ class _TravelExplorerScreenState extends ConsumerState<TravelExplorerScreen>
   }
 
   Widget _buildHeaderImage(BuildContext context) {
-    final screenHeight = MediaQuery.of(context).size.height;
+    // final screenHeight = MediaQuery.of(context).size.height;
     return Container(
-      height: screenHeight * 0.25,
+      height: context.r.homeHeaderHeight(),
       decoration: const BoxDecoration(
         image: DecorationImage(
           image: AssetImage('assets/background_app.jpg'),
@@ -345,7 +352,7 @@ class _TravelExplorerScreenState extends ConsumerState<TravelExplorerScreen>
       child: GestureDetector(
         onTap:
             () => Navigator.of(context).push(
-              MaterialPageRoute(
+              platformPageRoute(
                 builder: (_) => SearchScreen(isGuest: widget.isGuest),
               ),
             ),
@@ -379,8 +386,9 @@ class _TravelExplorerScreenState extends ConsumerState<TravelExplorerScreen>
     if (!_isLoadingOfflineTours && _offlineTours.isEmpty)
       return const SizedBox.shrink();
 
-    final screenHeight = MediaQuery.of(context).size.height;
-    final screenWidth = MediaQuery.of(context).size.width;
+    final cardHeight = context.r.homeTourCardHeight();
+    final cardWidth = context.r.homeTourCardWidth();
+    final imageHeight = context.r.homeTourCardImageHeight();
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 10.0),
@@ -394,8 +402,8 @@ class _TravelExplorerScreenState extends ConsumerState<TravelExplorerScreen>
             ),
             child: Text(
               'offline_tours'.tr(),
-              style: const TextStyle(
-                fontSize: 20,
+              style: TextStyle(
+                fontSize: context.r.sp(20),
                 fontWeight: FontWeight.bold,
                 color: AppColors.textPrimary,
               ),
@@ -403,12 +411,12 @@ class _TravelExplorerScreenState extends ConsumerState<TravelExplorerScreen>
           ),
           if (_isLoadingOfflineTours)
             SizedBox(
-              height: screenHeight * 0.25,
+              height: cardHeight,
               child: const Center(child: CircularProgressIndicator()),
             )
           else
             SizedBox(
-              height: screenHeight * 0.25,
+              height: cardHeight,
               child: ListView.builder(
                 scrollDirection: Axis.horizontal,
                 itemCount: _offlineTours.length,
@@ -421,12 +429,13 @@ class _TravelExplorerScreenState extends ConsumerState<TravelExplorerScreen>
                     ),
                     child: OfflineTourCard(
                       tourData: tour,
-                      cardWidth: screenWidth * 0.6,
-                      imageHeight: 140,
+                      cardWidth: cardWidth,
+                      imageHeight: imageHeight,
+                      height: cardHeight,
                       onTap:
                           () => Navigator.push(
                             context,
-                            MaterialPageRoute(
+                            platformPageRoute(
                               builder:
                                   (context) => TourDetailScreen(
                                     tourId: tour['id'],
@@ -446,8 +455,9 @@ class _TravelExplorerScreenState extends ConsumerState<TravelExplorerScreen>
   }
 
   Widget _buildNearbyToursSection(BuildContext context) {
-    final screenHeight = MediaQuery.of(context).size.height;
-    final screenWidth = MediaQuery.of(context).size.width;
+    const cardHeight = TravelListItemCard.compactHeight;
+    const cardWidth = TravelListItemCard.compactWidth;
+    const imageHeight = TravelListItemCard.compactImageHeight;
 
     // Usa il provider per ottenere lo stato
     final nearbyToursState = ref.watch(nearbyToursProvider);
@@ -464,23 +474,29 @@ class _TravelExplorerScreenState extends ConsumerState<TravelExplorerScreen>
             ),
             child: Text(
               'recent_tours'.tr(),
-              style: const TextStyle(
-                fontSize: 20,
+              style: TextStyle(
+                fontSize: context.r.sp(20),
                 fontWeight: FontWeight.bold,
                 color: AppColors.textPrimary,
               ),
             ),
           ),
-          if (nearbyToursState.isLoading &&
-              (nearbyToursState.tours == null ||
-                  nearbyToursState.tours!.isEmpty))
+          // if (nearbyToursState.isLoading &&
+          //     (nearbyToursState.tours == null ||
+          //         nearbyToursState.tours!.isEmpty))
+          if (nearbyToursState.isLoading || nearbyToursState.tours == null)
             SizedBox(
-              height: screenHeight * 0.25,
+              height: cardHeight,
               child: const Center(child: CircularProgressIndicator()),
+            )
+          else if (nearbyToursState.tours!.isEmpty)
+            SizedBox(
+              height: cardHeight,
+              child: Center(child: Text("no_tours_available".tr())),
             )
           else
             SizedBox(
-              height: screenHeight * 0.25,
+              height: cardHeight,
               child: ListView.builder(
                 scrollDirection: Axis.horizontal,
                 itemCount: nearbyToursState.tours?.length ?? 0,
@@ -496,25 +512,38 @@ class _TravelExplorerScreenState extends ConsumerState<TravelExplorerScreen>
                       imagePath: tour.imagePath,
                       title: tour.title,
                       description: tour.description,
-                      cardWidth: screenWidth * 0.6,
-                      imageHeight: 140,
+                      cardWidth: cardWidth,
+                      imageHeight: imageHeight,
+                      height: cardHeight,
                       category: tour.category,
                       rating: tour.rating,
                       reviewCount: tour.reviewCount,
                       totViews: tour.totViews.toString(),
                       creator: tour.creator,
                       lastEdited: tour.lastEdited,
-                      onTap:
-                          () => Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder:
-                                  (context) => TourDetailScreen(
-                                    tourId: tour.id,
-                                    isGuest: widget.isGuest,
-                                  ),
-                            ),
+                      onTap: () {
+                        unawaited(
+                          _analytics.logEvent(
+                            name: "tour_open",
+                            parameters: {
+                              "tour_id": tour.id,
+                              "is_guest": widget.isGuest.toString(),
+                              "source": "nearby_section",
+                            },
                           ),
+                        );
+
+                        Navigator.push(
+                          context,
+                          platformPageRoute(
+                            builder:
+                                (context) => TourDetailScreen(
+                                  tourId: tour.id,
+                                  isGuest: widget.isGuest,
+                                ),
+                          ),
+                        );
+                      },
                     ),
                   );
                 },
@@ -544,8 +573,8 @@ class _TravelExplorerScreenState extends ConsumerState<TravelExplorerScreen>
             ),
             child: Text(
               'categories'.tr(),
-              style: const TextStyle(
-                fontSize: 18,
+              style: TextStyle(
+                fontSize: context.r.sp(18),
                 fontWeight: FontWeight.bold,
                 color: AppColors.textPrimary,
               ),
@@ -564,7 +593,7 @@ class _TravelExplorerScreenState extends ConsumerState<TravelExplorerScreen>
                         onTap:
                             () => Navigator.push(
                               context,
-                              MaterialPageRoute(
+                              platformPageRoute(
                                 builder:
                                     (context) => CategoryDetailScreen(
                                       isGuest: widget.isGuest,
@@ -600,10 +629,10 @@ class _TravelExplorerScreenState extends ConsumerState<TravelExplorerScreen>
                                 child: Text(
                                   category.name[0].toUpperCase() +
                                       category.name.substring(1).toLowerCase(),
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                     color: Colors.white,
                                     fontWeight: FontWeight.bold,
-                                    fontSize: 16,
+                                    fontSize: context.r.sp(16),
                                   ),
                                 ),
                               ),
@@ -630,6 +659,7 @@ class OfflineTourCard extends StatefulWidget {
   final Map<String, dynamic> tourData;
   final double cardWidth;
   final double imageHeight;
+  final double height;
   final VoidCallback onTap;
 
   const OfflineTourCard({
@@ -637,6 +667,7 @@ class OfflineTourCard extends StatefulWidget {
     required this.tourData,
     required this.cardWidth,
     required this.imageHeight,
+    required this.height,
     required this.onTap,
   }) : super(key: key);
 
@@ -671,6 +702,7 @@ class _OfflineTourCardState extends State<OfflineTourCard> {
       onTap: widget.onTap,
       child: SizedBox(
         width: widget.cardWidth,
+        height: widget.height,
         child: Card(
           elevation: 2.0,
           shape: RoundedRectangleBorder(
@@ -691,15 +723,6 @@ class _OfflineTourCardState extends State<OfflineTourCard> {
                   color: Colors.grey.shade200,
                   child:
                       _imagePath != null
-                          // ? Image.file(
-                          //   File(_imagePath!),
-                          //   fit: BoxFit.cover,
-                          //   errorBuilder:
-                          //       (context, error, stackTrace) => Icon(
-                          //         Icons.broken_image,
-                          //         color: Colors.grey.shade400,
-                          //       ),
-                          // )
                           ? ZlibImage(
                             filePath: _imagePath!,
                             // width: widget.cardWidth,
@@ -728,20 +751,20 @@ class _OfflineTourCardState extends State<OfflineTourCard> {
                     // Title
                     Text(
                       title,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontWeight: FontWeight.bold,
-                        fontSize: 16,
+                        fontSize: context.r.sp(16),
                         color: AppColors.textPrimary,
                       ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
-                    const SizedBox(height: 4),
+                    SizedBox(height: context.r.space(8)),
                     // Description
                     Text(
                       description,
-                      style: const TextStyle(
-                        fontSize: 12,
+                      style: TextStyle(
+                        fontSize: context.r.sp(14),
                         color: AppColors.textSecondary,
                       ),
                       maxLines: 1,

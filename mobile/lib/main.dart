@@ -1,36 +1,30 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:xr_tour_guide/services/local_state_service.dart';
 import 'models/app_colors.dart';
 import 'home_screen.dart';
 import 'package:flutter_downloader/flutter_downloader.dart'; // Import flutter_downloader
 import 'services/auth_service.dart';
-import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:dio/dio.dart';
-import 'package:url_launcher/url_launcher.dart';
 import "package:easy_localization/easy_localization.dart";
 import "server_selection_screen.dart";
 import "dart:io" show Platform;
-import "package:flutter/foundation.dart" show kIsWeb;
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
 import 'package:app_links/app_links.dart';
 import 'tour_details_page.dart';
 import 'dart:convert';
-import 'services/api_service.dart';
+import 'utils/platform_page_route.dart';
+
+import 'utils/responsive.dart';
 
 // This is a top-level function and MUST NOT be a method of a class.
 // It serves as the entry point for FlutterDownloader's background tasks.
 @pragma('vm:entry-point')
 void downloadCallback(String id, int status, int progress) {
-  print('Download task ($id) is $status and progress is $progress');
-  // You can implement custom logic here, like updating UI using isolates or state management.
+  debugPrint('Download task ($id) is $status and progress is $progress');
 }
-
-// final authServiceProvider = ChangeNotifierProvider<AuthService>((ref) {
-//   return AuthService();
-// });
 
 final RouteObserver<ModalRoute<void>> routeObserver =
     RouteObserver<ModalRoute<void>>();
@@ -92,12 +86,11 @@ class _MyAppState extends ConsumerState<MyApp> {
     super.initState();
     _appLinks = AppLinks();
     _initDeepLinks();
-
   }
 
   Future<void> _initDeepLinks() async {
     final initialUri = await _appLinks.getInitialLink();
-    print('DEEPLINK initInitial: $initialUri');
+    debugPrint('DEEPLINK initInitial: $initialUri');
     if (initialUri != null) {
       _handleUri(initialUri);
     }
@@ -121,7 +114,7 @@ class _MyAppState extends ConsumerState<MyApp> {
   }
 
   void _handleUri(Uri uri) {
-    print(
+    debugPrint(
       'DEEPLINK _handleUri: uri=$uri, path=${uri.pathSegments}, query=${uri.queryParameters}',
     );
     final tourId = _extractTourId(uri);
@@ -136,7 +129,7 @@ class _MyAppState extends ConsumerState<MyApp> {
 
     ref.read(pendingTourIdProvider.notifier).state = tourId;
     ref.read(pendingTourDomainProvider.notifier).state = domainUrl;
-    
+
     // _tryOpenPendingTour(ref.read(authServiceProvider).authStatus);
   }
 
@@ -166,18 +159,21 @@ class _MyAppState extends ConsumerState<MyApp> {
     if (status == AuthStatus.authenticated) {
       // Costruisci stack: TravelExplorer -> TourDetail
       navigatorKey.currentState?.pushAndRemoveUntil(
-        MaterialPageRoute(builder: (_) => const TravelExplorerScreen(isGuest: false)),
+        platformPageRoute(
+          builder: (_) => const TravelExplorerScreen(isGuest: false),
+        ),
         (route) => false, // rimuove tutte le route precedenti
       );
       navigatorKey.currentState?.push(
-        MaterialPageRoute(
-          builder: (_) => TourDetailScreen(tourId: pendingTourId, isGuest: false),
+        platformPageRoute(
+          builder:
+              (_) => TourDetailScreen(tourId: pendingTourId, isGuest: false),
         ),
       );
       ref.read(pendingTourIdProvider.notifier).state = null;
     } else {
       navigatorKey.currentState?.push(
-        MaterialPageRoute(builder: (_) => const AuthFlowScreen()),
+        platformPageRoute(builder: (_) => const AuthFlowScreen()),
       );
     }
   }
@@ -196,6 +192,18 @@ class _MyAppState extends ConsumerState<MyApp> {
 
     return MaterialApp(
       title: "app_name".tr(),
+      builder: (context, child) {
+        final mediaQuery = MediaQuery.of(context);
+        return MediaQuery(
+          data: mediaQuery.copyWith(
+            textScaler: mediaQuery.textScaler.clamp(
+              minScaleFactor: 0.9,
+              maxScaleFactor: 1.15,
+            ),
+          ),
+          child: child!,
+        );
+      },
       localizationsDelegates: context.localizationDelegates,
       supportedLocales: context.supportedLocales,
       locale: context.locale,
@@ -224,8 +232,81 @@ class _MyAppState extends ConsumerState<MyApp> {
           },
         ),
       ),
-      // home: const AuthChecker(),
-      home: const WelcomeScreen(),
+      home: const AuthChecker(),
+      // home: const WelcomeScreen(),
+    );
+  }
+}
+
+class ServerGate extends ConsumerStatefulWidget {
+  final bool isGuest;
+
+  const ServerGate({Key? key, required this.isGuest}) : super(key: key);
+
+  @override
+  ConsumerState<ServerGate> createState() => _ServerGateState();
+}
+
+class _ServerGateState extends ConsumerState<ServerGate> {
+  bool _loading = true;
+  String? _errorMessage;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkSavedServer();
+  }
+
+  Future<void> _checkSavedServer() async {
+    final localState = ref.read(localStateServiceProvider);
+    final apiService = ref.read(apiServiceProvider);
+
+    final savedUrl = await localState.getSelectedServerUrl();
+
+    if (savedUrl == null || savedUrl.isEmpty) {
+      setState(() {
+        _loading = false;
+      });
+      return;
+    }
+
+    apiService.updateBaseUrl(savedUrl);
+
+    final available = await apiService.pingServer(
+      urlToCheck: apiService.getCurrentBaseUrl(),
+      timeout: const Duration(seconds: 2),
+    );
+
+    if (!mounted) return;
+
+    if (available) {
+      Navigator.of(context).pushReplacement(
+        platformPageRoute(
+          builder: (_) => TravelExplorerScreen(isGuest: widget.isGuest),
+        ),
+      );
+    } else {
+      await localState.clearSelectedServer();
+
+      setState(() {
+        _loading = false;
+        _errorMessage = "server_selection_error".tr();
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loading) {
+      return const Scaffold(
+        backgroundColor: AppColors.background,
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    return WelcomeScreen(
+      isGuest: widget.isGuest,
+      initialErrorMessage: _errorMessage,
     );
   }
 }
@@ -239,13 +320,14 @@ class AuthChecker extends ConsumerWidget {
     if (status == AuthStatus.loading) return;
 
     if (status == AuthStatus.authenticated) {
-
       navigatorKey.currentState?.pushAndRemoveUntil(
-        MaterialPageRoute(builder: (_) => const TravelExplorerScreen(isGuest: false)),
+        platformPageRoute(
+          builder: (_) => const TravelExplorerScreen(isGuest: false),
+        ),
         (route) => false,
       );
       navigatorKey.currentState?.push(
-        MaterialPageRoute(
+        platformPageRoute(
           builder:
               (_) => TourDetailScreen(tourId: pendingTourId, isGuest: false),
         ),
@@ -253,7 +335,7 @@ class AuthChecker extends ConsumerWidget {
       ref.read(pendingTourIdProvider.notifier).state = null;
     } else {
       navigatorKey.currentState?.push(
-        MaterialPageRoute(builder: (_) => const AuthFlowScreen()),
+        platformPageRoute(builder: (_) => const AuthFlowScreen()),
       );
     }
   }
@@ -273,7 +355,7 @@ class AuthChecker extends ConsumerWidget {
           body: Center(child: CircularProgressIndicator()),
         );
       case AuthStatus.authenticated:
-        return const TravelExplorerScreen(isGuest: false);
+        return const ServerGate(isGuest: false);
       case AuthStatus.unauthenticated:
         return const AuthFlowScreen();
       case AuthStatus.registering:
@@ -322,7 +404,7 @@ class _AuthFlowScreenState extends ConsumerState<AuthFlowScreen> {
             content: Text('register_success_message'.tr()),
             backgroundColor: Colors.green,
             behavior: SnackBarBehavior.floating,
-            margin: EdgeInsets.only(bottom: 40, left: 16, right: 16),
+            margin: EdgeInsets.only(top: 40, left: 16, right: 16),
             duration: Duration(seconds: 5),
           ),
         );
@@ -397,9 +479,9 @@ class _AuthFlowScreenState extends ConsumerState<AuthFlowScreen> {
             const SizedBox(width: 12),
             Text(
               text,
-              style: const TextStyle(
+              style: TextStyle(
                 color: AppColors.textPrimary,
-                fontSize: 16,
+                fontSize: context.r.sp(16),
                 fontWeight: FontWeight.w500,
               ),
             ),
@@ -436,9 +518,9 @@ class _AuthFlowScreenState extends ConsumerState<AuthFlowScreen> {
         ),
         child: Text(
           text,
-          style: const TextStyle(
+          style: TextStyle(
             color: Colors.white,
-            fontSize: 16,
+            fontSize: context.r.sp(16),
             fontWeight: FontWeight.w600,
           ),
         ),
@@ -464,8 +546,8 @@ class _AuthFlowScreenState extends ConsumerState<AuthFlowScreen> {
           padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           child: Text(
             label,
-            style: const TextStyle(
-              fontSize: 16,
+            style: TextStyle(
+              fontSize: context.r.sp(16),
               fontWeight: FontWeight.w500,
               color: AppColors.textPrimary,
             ),
@@ -556,7 +638,7 @@ class _AuthFlowScreenState extends ConsumerState<AuthFlowScreen> {
                           Text(
                             'onboarding_title'.tr(),
                             style: TextStyle(
-                              fontSize: 28,
+                              fontSize: context.r.sp(28),
                               fontWeight: FontWeight.bold,
                               color: AppColors.textPrimary,
                             ),
@@ -570,7 +652,7 @@ class _AuthFlowScreenState extends ConsumerState<AuthFlowScreen> {
                               'onboarding_subtitle'.tr(),
                               textAlign: TextAlign.center,
                               style: TextStyle(
-                                fontSize: 16,
+                                fontSize: context.r.sp(16),
                                 color: AppColors.textSecondary,
                                 height: 1.5,
                               ),
@@ -592,22 +674,61 @@ class _AuthFlowScreenState extends ConsumerState<AuthFlowScreen> {
                               ),
                             ),
                             onPressed: () async {
-                              print('Google login tapped');
+                              try {
+                                await _authService.loginWithGoogle();
+                              } catch (e) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text("login_error".tr()),
+                                    backgroundColor: const Color.fromARGB(
+                                      255,
+                                      15,
+                                      6,
+                                      5,
+                                    ),
+                                    behavior: SnackBarBehavior.floating,
+                                    margin: const EdgeInsets.only(
+                                      bottom: 40,
+                                      left: 16,
+                                      right: 16,
+                                    ),
+                                    duration: const Duration(seconds: 5),
+                                  ),
+                                );
+                              }
                             },
                             context: context,
                           ),
-                          _buildSocialButton(
-                            text: 'facebook_log'.tr(),
-                            icon: const Icon(
-                              Icons.facebook,
-                              color: Colors.blue,
-                              size: 24,
+                          const SizedBox(height: 20),
+                          if (Platform.isIOS)
+                            _buildSocialButton(
+                              text: 'Sign in with Apple',
+                              icon: const Icon(
+                                Icons.apple,
+                                color: Colors.black,
+                                size: 22,
+                              ),
+                              onPressed: () async {
+                                try {
+                                  await _authService.loginWithApple();
+                                } catch (e) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text("login_error".tr()),
+                                      backgroundColor: Colors.red,
+                                      behavior: SnackBarBehavior.floating,
+                                      margin: const EdgeInsets.only(
+                                        bottom: 40,
+                                        left: 16,
+                                        right: 16,
+                                      ),
+                                      duration: const Duration(seconds: 5),
+                                    ),
+                                  );
+                                }
+                              },
+                              context: context,
                             ),
-                            onPressed: () {
-                              print('Facebook login tapped');
-                            },
-                            context: context,
-                          ),
                           const SizedBox(height: 20),
                           Container(
                             margin: EdgeInsets.symmetric(
@@ -671,10 +792,10 @@ class _AuthFlowScreenState extends ConsumerState<AuthFlowScreen> {
                         setState(() {
                           //navigate to main page as guest
                           Navigator.of(context).pushReplacement(
-                            MaterialPageRoute(
+                            platformPageRoute(
                               builder:
                                   (context) =>
-                                      TravelExplorerScreen(isGuest: true),
+                                      const ServerGate(isGuest: true),
                             ),
                           );
                         });
@@ -725,7 +846,7 @@ class _AuthFlowScreenState extends ConsumerState<AuthFlowScreen> {
             Text(
               'password_reset'.tr(),
               style: TextStyle(
-                fontSize: 20,
+                fontSize: context.r.sp(20),
                 fontWeight: FontWeight.bold,
                 color: AppColors.textPrimary,
               ),
@@ -819,7 +940,7 @@ class _AuthFlowScreenState extends ConsumerState<AuthFlowScreen> {
                               if (mounted) {
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   SnackBar(
-                                    content: Text(e.toString()),
+                                    content: Text("password_reset_error".tr()),
                                     backgroundColor: Colors.red,
                                     behavior: SnackBarBehavior.floating,
                                     margin: const EdgeInsets.only(
@@ -887,7 +1008,7 @@ class _AuthFlowScreenState extends ConsumerState<AuthFlowScreen> {
 
     return Scaffold(
       backgroundColor: AppColors.background,
-      resizeToAvoidBottomInset: false,
+      resizeToAvoidBottomInset: true,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
@@ -923,7 +1044,7 @@ class _AuthFlowScreenState extends ConsumerState<AuthFlowScreen> {
                       Text(
                         'login_title'.tr(),
                         style: TextStyle(
-                          fontSize: 28,
+                          fontSize: context.r.sp(28),
                           fontWeight: FontWeight.bold,
                           color: AppColors.textPrimary,
                         ),
@@ -934,7 +1055,7 @@ class _AuthFlowScreenState extends ConsumerState<AuthFlowScreen> {
                         child: Text(
                           'login_subtitle'.tr(),
                           style: TextStyle(
-                            fontSize: 16,
+                            fontSize: context.r.sp(16),
                             color: AppColors.textSecondary,
                             height: 1.5,
                           ),
@@ -981,7 +1102,7 @@ class _AuthFlowScreenState extends ConsumerState<AuthFlowScreen> {
                             // ),
                             GestureDetector(
                               onTap: () {
-                                print('Forgot password tapped');
+                                debugPrint('Forgot password tapped');
                                 _showDeleteAccountSheet(context);
                               },
                               child: Text(
@@ -998,16 +1119,14 @@ class _AuthFlowScreenState extends ConsumerState<AuthFlowScreen> {
                       _buildPrimaryButton(
                         text: 'login'.tr(),
                         onPressed: () async {
-                          print("UserLogin");
+                          debugPrint("UserLogin");
                           try {
                             await authService.login(
                               _emailController.text,
                               _passwordController.text,
                             );
                           } catch (e) {
-                            _showError(
-                              authService.loginErrorMessage ?? 'Login failed',
-                            );
+                            _showError('login_error'.tr());
                           }
                         },
                         context: context,
@@ -1051,29 +1170,48 @@ class _AuthFlowScreenState extends ConsumerState<AuthFlowScreen> {
                                 ),
                               ),
                             ),
-                            //TODO
-                            onPressed: () => print('Google login'),
+                            onPressed: () async {
+                              try {
+                                await _authService.loginWithGoogle();
+                              } catch (e) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text("login_error".tr()),
+                                    backgroundColor: Colors.red,
+                                  ),
+                                );
+                              }
+                            },
                           ),
                           const SizedBox(width: 20),
-                          _buildSocialIconButton(
-                            icon: const Icon(
-                              Icons.facebook,
-                              color: Colors.blue,
-                              size: 28,
+                          if (Platform.isIOS)
+                            _buildSocialIconButton(
+                              icon: const Icon(
+                                Icons.apple,
+                                color: Colors.black,
+                                size: 22,
+                              ),
+                              onPressed: () async {
+                                try {
+                                  await _authService.loginWithApple();
+                                } catch (e) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text("login_error".tr()),
+                                      backgroundColor: Colors.red,
+                                      behavior: SnackBarBehavior.floating,
+                                      margin: const EdgeInsets.only(
+                                        bottom: 40,
+                                        left: 16,
+                                        right: 16,
+                                      ),
+                                      duration: const Duration(seconds: 5),
+                                    ),
+                                  );
+                                }
+                              },
                             ),
-                            //TODO
-                            onPressed: () => print('Facebook login'),
-                          ),
-                          // const SizedBox(width: 20),
-                          // _buildSocialIconButton(
-                          //   icon: const Icon(
-                          //     Icons.apple,
-                          //     color: Colors.black,
-                          //     size: 28,
-                          //   ),
-                          //   //TODO
-                          //   onPressed: () => print('Apple login'),
-                          // ),
+                          const SizedBox(width: 20),
                         ],
                       ),
                       SizedBox(height: screenHeight * 0.04),
@@ -1138,7 +1276,7 @@ class _AuthFlowScreenState extends ConsumerState<AuthFlowScreen> {
 
     return Scaffold(
       backgroundColor: AppColors.background,
-      resizeToAvoidBottomInset: false,
+      resizeToAvoidBottomInset: true,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
@@ -1165,7 +1303,7 @@ class _AuthFlowScreenState extends ConsumerState<AuthFlowScreen> {
                     Text(
                       'create_account_title'.tr(),
                       style: TextStyle(
-                        fontSize: 28,
+                        fontSize: context.r.sp(28),
                         fontWeight: FontWeight.bold,
                         color: AppColors.textPrimary,
                       ),
@@ -1176,7 +1314,7 @@ class _AuthFlowScreenState extends ConsumerState<AuthFlowScreen> {
                       child: Text(
                         'create_account_subtitle'.tr(),
                         style: TextStyle(
-                          fontSize: 16,
+                          fontSize: context.r.sp(16),
                           color: AppColors.textSecondary,
                           height: 1.5,
                         ),
@@ -1290,29 +1428,49 @@ class _AuthFlowScreenState extends ConsumerState<AuthFlowScreen> {
                               ),
                             ),
                           ),
-                          //TODO: Add Google register logic
-                          onPressed: () => print('Google register'),
+                          onPressed: () async {
+                            try {
+                              await authService.loginWithGoogle();
+                            } catch (e) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text("login_error".tr()),
+                                  backgroundColor: Colors.red,
+                                  duration: const Duration(seconds: 5),
+                                ),
+                              );
+                            }
+                          },
                         ),
                         const SizedBox(width: 20),
-                        _buildSocialIconButton(
-                          icon: const Icon(
-                            Icons.facebook,
-                            color: Colors.blue,
-                            size: 28,
+                        if (Platform.isIOS)
+                          _buildSocialIconButton(
+                            icon: const Icon(
+                              Icons.apple,
+                              color: Colors.black,
+                              size: 22,
+                            ),
+                            onPressed: () async {
+                              try {
+                                await _authService.loginWithApple();
+                              } catch (e) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text("login_error".tr()),
+                                    backgroundColor: Colors.red,
+                                    behavior: SnackBarBehavior.floating,
+                                    margin: const EdgeInsets.only(
+                                      bottom: 40,
+                                      left: 16,
+                                      right: 16,
+                                    ),
+                                    duration: const Duration(seconds: 5),
+                                  ),
+                                );
+                              }
+                            },
                           ),
-                          //TODO: Add Facebook register logic
-                          onPressed: () => print('Facebook register'),
-                        ),
-                        // const SizedBox(width: 20),
-                        // _buildSocialIconButton(
-                        //   icon: const Icon(
-                        //     Icons.apple,
-                        //     color: Colors.black,
-                        //     size: 28,
-                        //   ),
-                        //   //TODO: Add Apple register logic
-                        //   onPressed: () => print('Apple register'),
-                        // ),
+                        const SizedBox(width: 20),
                       ],
                     ),
                     SizedBox(height: screenHeight * 0.04),

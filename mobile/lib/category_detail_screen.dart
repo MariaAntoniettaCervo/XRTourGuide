@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:xr_tour_guide/models/tour.dart';
@@ -7,6 +9,9 @@ import 'tour_details_page.dart';
 import 'services/tour_service.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import "package:easy_localization/easy_localization.dart";
+import 'services/analytics_service.dart';
+import 'utils/responsive.dart';
+import 'utils/platform_page_route.dart';
 
 
 
@@ -29,6 +34,7 @@ class CategoryDetailScreen extends ConsumerStatefulWidget {
 class _CategoryDetailScreenState extends ConsumerState<CategoryDetailScreen> {
 
   late TourService _tourService;
+  late AnalyticsService _analytics;
 
   List<Tour>? _categoriesTour;
   bool _isLoading = true;
@@ -36,6 +42,7 @@ class _CategoryDetailScreenState extends ConsumerState<CategoryDetailScreen> {
   void initState() {
     super.initState();
     _tourService = ref.read(tourServiceProvider);
+    _analytics = ref.read(analyticsServiceProvider);
     _loadData();
   }
 
@@ -48,7 +55,8 @@ class _CategoryDetailScreenState extends ConsumerState<CategoryDetailScreen> {
 
   Future<void> _loadCategoryTours() async {
     try {
-      final tours = await _tourService.getToursByCategory(widget.categoryName);
+      final language = context.locale.languageCode.toLowerCase();
+      final tours = await _tourService.getToursByCategory(widget.categoryName, language: language);
       if (mounted) {
         setState(() {
           _categoriesTour = tours;
@@ -115,8 +123,8 @@ class _CategoryDetailScreenState extends ConsumerState<CategoryDetailScreen> {
             ),
             child: Text(
               'category_results'.tr(namedArgs: {'category': widget.categoryName, 'count': '${_categoriesTour?.length ?? 0}'}),
-              style: const TextStyle(
-                fontSize: 24,
+              style: TextStyle(
+                fontSize: context.r.sp(24),
                 fontWeight: FontWeight.bold,
                 color: AppColors.textPrimary,
               ),
@@ -135,25 +143,38 @@ class _CategoryDetailScreenState extends ConsumerState<CategoryDetailScreen> {
                   imagePath: tour.imagePath,
                   title: tour.title,
                   description: tour.description,
-                  cardWidth: screenWidth - 40, // Full width minus padding
+                  cardWidth: double.infinity, // Full width minus padding
                   fullWidth: true,
-                  imageHeight: 180,
+                  imageHeight: context.r.cardImageHeight(),
                   category: tour.category,
                   rating: tour.rating,
                   reviewCount: tour.reviewCount,
+                  totViews: tour.totViews.toString(),
                   // isFavorite: tour['isFavorite'] ?? false,
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder:
-                            (context) => TourDetailScreen(
-                              tourId: tour.id,
-                              isGuest: widget.isGuest,
-                            ),
-                      ),
-                    );
-                  },
+                  onTap:
+                      () {
+                        unawaited(
+                          _analytics.logEvent(
+                            name: "tour_open",
+                            parameters: {
+                              "tour_id": tour.id,
+                              "is_guest": widget.isGuest.toString(),
+                              "source": "categories_list",
+                            },
+                          ),
+                        );
+                        
+                        Navigator.push(
+                          context,
+                          platformPageRoute(
+                            builder:
+                                (context) => TourDetailScreen(
+                                  tourId: tour.id,
+                                  isGuest: widget.isGuest,
+                                ),
+                          ),
+                        );
+                      }
                 );
               },
             ),

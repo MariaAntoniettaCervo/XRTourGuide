@@ -1,11 +1,10 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:xr_tour_guide/models/tour.dart';
 import 'package:xr_tour_guide/models/category.dart';
 import 'package:xr_tour_guide/models/waypoint.dart';
 import 'package:xr_tour_guide/models/review.dart';
 import "package:xr_tour_guide/models/user.dart";
-import 'package:dio/dio.dart';
-import 'secure_storage_service.dart';
 import 'auth_service.dart';
 import 'api_service.dart';
 
@@ -19,9 +18,9 @@ class TourService {
   final ApiService apiService;
   TourService(this.apiService);
 
-  Future<List<Tour>> getNearbyTours(int timeout, double latitude, double longitude) async {
+  Future<List<Tour>> getNearbyTours(int timeout, double latitude, double longitude, {String? language}) async {
     try {
-      final response = await apiService.getNearbyTours(timeout, latitude, longitude, baseUrl: apiService.getCurrentBaseUrl());
+      final response = await apiService.getNearbyTours(timeout, latitude, longitude, baseUrl: apiService.getCurrentBaseUrl(), language: language);
       if (response.statusCode == 200) {
         final data = response.data as List;
         return data.map((tour) => Tour.fromJson(tour)).toList();
@@ -29,14 +28,14 @@ class TourService {
         throw Exception('Failed to load tours');
       }
     } catch (e) {
-      print("Nearby Tours Retrieval error: $e");
+      debugPrint("Nearby Tours Retrieval error: $e");
       rethrow;
     }
   }
 
-    Future<List<Tour>> getAllNearbyTours(int timeout) async {
+    Future<List<Tour>> getAllNearbyTours(int timeout, {String? language}) async {
     try {
-      final response = await apiService.getAllNearbyTours(timeout, baseUrl: apiService.getCurrentBaseUrl());
+      final response = await apiService.getAllNearbyTours(timeout, baseUrl: apiService.getCurrentBaseUrl(), language: language);
       if (response.statusCode == 200) {
         final data = response.data as List;
         return data.map((tour) => Tour.fromJson(tour)).toList();
@@ -44,7 +43,7 @@ class TourService {
         throw Exception('Failed to load tours');
       }
     } catch (e) {
-      print("Nearby Tours Retrieval error: $e");
+      debugPrint("Nearby Tours Retrieval error: $e");
       rethrow;
     }
   }
@@ -60,14 +59,14 @@ class TourService {
           throw Exception('Failed to load tour details');
         }
       } catch (e) {
-        print("Tour Details Retrieval error: $e");
+        debugPrint("Tour Details Retrieval error: $e");
         rethrow;
       }
   }
 
-  Future<List<Tour>> getToursByCategory(String category) async {
+  Future<List<Tour>> getToursByCategory(String category, {String? language}) async {
     try {
-      final response = await apiService.getTourByCategory(category, baseUrl: apiService.getCurrentBaseUrl());
+      final response = await apiService.getTourByCategory(category, baseUrl: apiService.getCurrentBaseUrl(), language: language);
       if (response.statusCode == 200) {
         final data = response.data as List;
         return data.map((tour) => Tour.fromJson(tour)).toList();
@@ -75,16 +74,17 @@ class TourService {
         throw Exception('Failed to load tours');
       }
     } catch (e) {
-      print("Tours By category Retrieval error: $e");
+      debugPrint("Tours By category Retrieval error: $e");
       rethrow;
     }
   }
 
-  Future<List<Tour>> getToursBySearchTerm(String searchTerm) async {
+  Future<List<Tour>> getToursBySearchTerm(String searchTerm, {String? language}) async {
     try {
       final response = await apiService.getTourBySearchTerm(
         searchTerm.toLowerCase(),
         baseUrl: apiService.getCurrentBaseUrl(),
+        language: language,
       );
       if (response.statusCode == 200) {
         final data = response.data as List;
@@ -93,7 +93,7 @@ class TourService {
         throw Exception('Failed to load tours');
       }
     } catch (e) {
-      print("Nearby Tours Retrieval error: $e");
+      debugPrint("Nearby Tours Retrieval error: $e");
       rethrow;
     }
   }
@@ -109,7 +109,8 @@ Future<List<Waypoint>> getWaypointsByTour(int tourId) async {
         List<Waypoint> allWaypoints =
             waypointData
                 .map((waypoint) => Waypoint.fromJson(waypoint))
-                .toList();
+                .toList()
+                ..sort(Waypoint.compareByPosition);
 
         // Se ci sono sub-tours, aggiungi i loro waypoints come sub-waypoints
         if (data.containsKey('sub_tours') && data['sub_tours'] != null) {
@@ -120,7 +121,8 @@ Future<List<Waypoint>> getWaypointsByTour(int tourId) async {
             final subWaypoints =
                 subWaypointData
                     .map((waypoint) => Waypoint.fromJson(waypoint))
-                    .toList();
+                    .toList()
+                    ..sort(Waypoint.compareByPosition);
 
             // Crea un waypoint principale per il sub-tour
             final subTourInfo = subTour['sub_tour'];
@@ -133,6 +135,7 @@ Future<List<Waypoint>> getWaypointsByTour(int tourId) async {
               longitude: subTourInfo['lon']?.toDouble() ?? 0.0,
               images: [], // Sub-tour principale non ha immagini
               category: subTourInfo['category'] ?? 'MIXED',
+              position: (subTourInfo["position"] as num?)?.toInt() ?? 999999,
               subWaypoints: subWaypoints, // Aggiungi i sub-waypoints qui
             );
 
@@ -140,12 +143,13 @@ Future<List<Waypoint>> getWaypointsByTour(int tourId) async {
           }
         }
 
+        allWaypoints.sort(Waypoint.compareByPosition);
         return allWaypoints;
       } else {
         throw Exception('Failed to load tour waypoints');
       }
     } catch (e) {
-      print("Tour Waypoints Retrieval error: $e");
+      debugPrint("Tour Waypoints Retrieval error: $e");
       rethrow;
     }
   }
@@ -160,7 +164,7 @@ Future<List<Waypoint>> getWaypointsByTour(int tourId) async {
         throw Exception('Failed to load tour reviews');
       }     
     } catch (e) {
-      print("Tour Reviews Retrieval error: $e");
+      debugPrint("Tour Reviews Retrieval error: $e");
       rethrow; 
     }
 
@@ -186,9 +190,10 @@ Future<List<Waypoint>> getWaypointsByTour(int tourId) async {
 
     // Mock data
     return [
-      Category(name: 'INSIDE', image: 'assets/interior.jpg'),
-      Category(name: 'OUTSIDE', image: 'assets/exterior.jpg'),
+      Category(name: 'INDOOR', image: 'assets/interior.jpg'),
+      Category(name: 'OUTDOOR', image: 'assets/exterior.jpg'),
       Category(name: 'MIXED', image: 'assets/int-exterior.jpg'),
+      Category(name: "GUIDE", image: 'assets/things.png'),
     ];
   }
 
@@ -211,10 +216,9 @@ Future<User> getUserDetails() async {
       throw Exception('Failed to load user details');
     }
   } catch (e) {
-    print("User Details Retrieval error: $e");
+    debugPrint("User Details Retrieval error: $e");
     rethrow;
   }
-  //TODO: Gestire errore 401 per token non riconosciuto
 }
 
   Future<({List<Review> reviews, int totalCount})> getReviewByUser(int max) async {
@@ -232,7 +236,7 @@ Future<User> getUserDetails() async {
         throw Exception('Failed to load user reviews');
       }
     } catch (e) {
-      print("User Reviews Retrieval error: $e");
+      debugPrint("User Reviews Retrieval error: $e");
       rethrow;
     }
 
@@ -258,6 +262,19 @@ Future<User> getUserDetails() async {
     return (reviews: finalReviews, totalCount: totalCount);
   }
 
+  Future<bool> hasUserReviewedTour(int tourId) async {
+    final response = await apiService.hasReviewedTour(
+      tourId,
+      baseUrl: apiService.getCurrentBaseUrl(),
+    );
+
+    if (response.statusCode == 200) {
+      final data = response.data as Map<String, dynamic>;
+      return data['has_reviewed'] == true;
+    }
+    throw Exception('Failed to check review status');
+  }
+
   Future<Map<String, dynamic>> getResourceByWaypointAndType(int waypointId, String type) async {
     Map<String, dynamic> resource = {};
     try {
@@ -268,7 +285,7 @@ Future<User> getUserDetails() async {
         throw Exception('Failed to load resource of type $type for waypoint $waypointId');
       }
     } catch (e) {
-      print("Resource Retrieval error: $e");
+      debugPrint("Resource Retrieval error: $e");
       rethrow;
     }
     return resource;

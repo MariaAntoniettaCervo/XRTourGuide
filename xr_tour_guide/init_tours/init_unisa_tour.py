@@ -1,5 +1,14 @@
 import os
 import django
+import sys
+from pathlib import Path
+
+current_file = Path(__file__).resolve()
+project_root = current_file.parent.parent
+print(f"project root: {project_root}")
+if str(project_root) not in sys.path:
+    sys.path.append(str(project_root))
+
 
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'xr_tour_guide.settings')
 django.setup()
@@ -21,7 +30,7 @@ if not Tour.objects.filter(title='Unisa').exists():
         coordinates="40.767715,14.792072",
         category=Category.MIXED,
         description='Fisciano Campus',
-        user=CustomUser.objects.get(username='username')
+        user=CustomUser.objects.get(username='xrtourguide')
     )
     print("Successfully created tour 'Unisa'")
 else:

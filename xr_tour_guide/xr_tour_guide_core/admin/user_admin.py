@@ -14,6 +14,17 @@ from ..models import CustomUser
 
 load_dotenv()
 
+def get_community_server_base_url():
+    configured_url = os.getenv("COMMUNITY_SERVER_URL", "").strip()
+    if configured_url:
+        return configured_url.rstrip("/")
+
+    legacy_value = os.getenv("COMMUNITY_SERVER", "").strip()
+    if legacy_value.startswith(("http://", "https://")):
+        return legacy_value.rstrip("/")
+
+    return f"http://{legacy_value}".rstrip("/")
+
 @admin.register(CustomUser)
 class CustomUserAdmin(ModelAdmin, UserAdmin):
     model = CustomUser
@@ -116,7 +127,8 @@ class CustomUserAdmin(ModelAdmin, UserAdmin):
 
 
             response = requests.post(
-                f"http://{os.getenv('COMMUNITY_SERVER')}/reset-password/",
+                # f"http://{os.getenv('COMMUNITY_SERVER')}/reset-password/",
+                f"{get_community_server_base_url()}/reset-password/",
                 json={'email': user.email},
                 timeout=5,
                 headers={
@@ -237,7 +249,8 @@ class CustomUserAdmin(ModelAdmin, UserAdmin):
                 auth_token = f"Bearer {auth_token}"
 
             response = requests.post(
-                f"http://{os.getenv('COMMUNITY_SERVER')}/update_profile",
+                # f"http://{os.getenv('COMMUNITY_SERVER')}/update_profile",
+                f"{get_community_server_base_url()}/update_profile",
                 json=payload,
                 timeout=5,
                 headers={"Authorization": auth_token}

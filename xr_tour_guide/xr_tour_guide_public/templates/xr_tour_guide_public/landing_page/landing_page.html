@@ -1,5 +1,5 @@
 {% extends 'xr_tour_guide_public/base.html' %}
-{% load i18n %}
+{% load i18n static %}
 {% block public_content %}
 
 <style>
@@ -1077,14 +1077,36 @@
     }
 
     .impact-card {
+        display: block;
         background: #ffffff;
         border: 1px solid #e2e8f0;
         border-radius: 12px;
-        padding: 50px 40px;
+        padding: 0;
         transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
         position: relative;
         overflow: hidden;
         text-align: center;
+        text-decoration: none;
+        color: inherit;
+    }
+
+    .impact-card-content {
+        padding: 32px 28px 36px;
+    }
+
+    .impact-card-image {
+        width: 100%;
+        height: 180px;
+        object-fit: contain;
+        object-position: center;
+        display: block;
+        background: #ffffff;
+        padding: 18px;
+    }
+
+    .impact-card:focus-visible {
+        outline: 3px solid rgba(128, 90, 213, 0.35);
+        outline-offset: 3px;
     }
 
     .impact-card::before {
@@ -1242,6 +1264,71 @@
         font-style: italic;
     }
 
+    .footer-socials {
+        display: flex;
+        justify-content: center;
+        gap: 18px;
+        flex-wrap: wrap;
+        margin: 24px 0 18px;
+    }
+
+    .footer-social-link {
+        width: 96px;
+        min-height: 96px;
+        display: inline-flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+        padding: 16px 12px;
+        border-radius: 18px;
+        border: 1px solid #e2e8f0;
+        background: #ffffff;
+        color: #2d3748;
+        text-decoration: none;
+        transition: all 0.25s ease;
+        box-shadow: 0 2px 10px rgba(15, 23, 42, 0.04);
+    }
+
+    .footer-logo {
+        height: 28px;
+        width: auto;
+        max-width: 120px;
+        margin: 0 auto 10px;
+        display: block;
+        border-radius: 4px;
+        object-fit: contain;
+    }
+
+    .footer-social-link:hover {
+        transform: translateY(-4px);
+        border-color: #cbd5e0;
+        background: #f8fafc;
+        color: #1a202c;
+        box-shadow: 0 10px 24px rgba(15, 23, 42, 0.10);
+    }
+
+    .footer-social-icon {
+        width: 26px;
+        height: 26px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .footer-social-icon svg {
+        width: 26px;
+        height: 26px;
+        display: block;
+        fill: currentColor;
+    }
+
+    .footer-social-label {
+        font-size: 0.82rem;
+        font-weight: 700;
+        line-height: 1.2;
+        text-align: center;
+    }
     /* --- RESPONSIVE --- */
     @media (max-width: 1200px) {
         .carousel-control-prev {
@@ -1384,10 +1471,9 @@
         </a>
         
         <ul class="navbar-menu">
-            <li><a href="#challenge">{% trans "The Challenge" %}</a></li>
-            <li><a href="#solution">{% trans "Our Solution" %}</a></li>
-            <li><a href="#features">{% trans "Features" %}</a></li>
             <li><a href="#tours">{% trans "Use Cases" %}</a></li>
+            <li><a href="#impact">{% trans "Acknowledgements" %}</a></li>
+            <li><a href="#footer">{% trans "Contacts" %}</a></li>
         </ul>
 
         <div class="navbar-actions">
@@ -1421,10 +1507,9 @@
 <!-- MOBILE MENU -->
 <div class="mobile-menu" id="mobileMenu">
     <ul>
-        <li><a href="#challenge">{% trans "The Challenge" %}</a></li>
-        <li><a href="#solution">{% trans "Our Solution" %}</a></li>
-        <li><a href="#features">{% trans "Features" %}</a></li>
         <li><a href="#tours">{% trans "Use Cases" %}</a></li>
+        <li><a href="#impact">{% trans "Acknowledgements" %}</a></li>
+        <li><a href="#footer">{% trans "Contacts" %}</a></li>
     </ul>
     
     <!-- Language Switcher for Mobile -->
@@ -1461,7 +1546,6 @@
             </p>
             <div class="hero-cta">
                 <a href="{% url 'register_platform' %}" class="btn btn-hero btn-hero-primary">{% trans "Discover How" %}</a>
-                <a href="#features" class="btn btn-hero btn-hero-secondary">{% trans "Learn More" %}</a>
             </div>
         </div>
         <div class="hero-visual">
@@ -1473,149 +1557,10 @@
                 <span class="decorative-dot"></span>
             </div>
             <div class="hero-image-wrapper">
-                {% if tours and tours.0.default_image %}
-                <img src="{% url 'stream_minio_resource' %}?tour={{ tours.0.id }}&file={{ tours.0.default_image.name|urlencode }}"
-                     alt="XR Tour Experience">
-                {% else %}
-                <img src="https://images.unsplash.com/photo-1531572753322-ad063cecc140?w=800&q=80"
-                     alt="Cultural Heritage Experience">
-                {% endif %}
-            </div>
-        </div>
-    </div>
-</section>
-
-<!-- CHALLENGE -->
-<section class="challenge" id="challenge">
-    <div class="challenge-container">
-        <div class="challenge-header">
-            <div class="challenge-label">{% trans "Understanding the Problem" %}</div>
-            <h2>{% trans "The Challenge in Rural Areas" %}</h2>
-            <p class="challenge-subtitle">
-                {% trans "Many regions rich in cultural heritage face significant hurdles that limit tourism, community involvement, and local opportunities." %}
-            </p>
-        </div>
-        <div class="challenge-grid">
-            <div class="challenge-card">
-                <div class="challenge-icon">🚧</div>
-                <h4>{% trans "Access Difficulties" %}</h4>
-                <p>
-                    {% trans "Cultural sites in many rural areas struggle to remain open and accessible. Chronic staff shortages make it hard to keep museums and historical buildings operating, while minimal or deteriorating infrastructure further discourages attendance." %}
-                </p>
-            </div>
-            <div class="challenge-card">
-                <div class="challenge-icon">🏛️</div>
-                <h4>{% trans "Insufficient Essential Services" %}</h4>
-                <p>
-                    {% trans "Basic visitor amenities—such as restrooms, seating, shelter, and refreshments—are often missing or in disrepair in village centers. Without these fundamental comforts, tourists are less inclined to stay and explore." %}
-                </p>
-            </div>
-            <div class="challenge-card">
-                <div class="challenge-icon">📍</div>
-                <h4>{% trans "Low Visibility & Weak Regional Identity" %}</h4>
-                <p>
-                    {% trans "These communities frequently lack strong branding or promotional efforts. As a result, the area remains \"off the map\" for most travelers, leading to under-utilization of rich cultural and natural assets." %}
-                </p>
-            </div>
-            <div class="challenge-card">
-                <div class="challenge-icon">📢</div>
-                <h4>{% trans "Poor Dissemination of Local Information" %}</h4>
-                <p>
-                    {% trans "Even when interesting sites exist, details about their history, significance, and practical visiting tips are hard to find. Limited distribution channels and fragmented information hinder awareness of what the territory has to offer." %}
-                </p>
-            </div>
-        </div>
-    </div>
-</section>
-
-<!-- SOLUTION -->
-<section class="solution" id="solution">
-    <div class="solution-container">
-        <div class="solution-header">
-            <div class="solution-label">{% trans "Our Solution" %}</div>
-            <h2>{% trans "XRTourGuide Platform" %}</h2>
-            <p class="solution-subtitle">
-                {% trans "An online platform empowering communities to create and share immersive XR virtual tours, enhancing real-world exploration." %}
-            </p>
-        </div>
-        <div class="solution-grid">
-            <div class="solution-card">
-                <div class="solution-icon">✏️</div>
-                <h4>{% trans "Authoring Platform" %}</h4>
-                <p>
-                    {% trans "A web-based tool allowing users (citizens, organizations) to easily create XR tours with text, images, audio, and video." %}
-                </p>
-            </div>
-            <div class="solution-card">
-                <div class="solution-icon">📱</div>
-                <h4>{% trans "Mobile Application" %}</h4>
-                <p>
-                    {% trans "A multi-platform app for users to discover and experience tours. Point your phone at objects to unlock rich media insights." %}
-                </p>
-            </div>
-            <div class="solution-card">
-                <div class="solution-icon">🤝</div>
-                <h4>{% trans "Community Co-Creation" %}</h4>
-                <p>
-                    {% trans "Developed in collaboration with rural communities through the Active Rural Community Working Group (ARCO-WG)." %}
-                </p>
-            </div>
-        </div>
-    </div>
-</section>
-
-<!-- FEATURES -->
-<section class="features" id="features">
-    <div class="features-container">
-        <div class="features-header">
-            <div class="features-label">{% trans "Key Features" %}</div>
-            <h2>{% trans "Cutting-Edge Technology" %}</h2>
-            <p class="features-subtitle">
-                {% trans "Leveraging advanced technology for engaging and immersive cultural experiences." %}
-            </p>
-        </div>
-        <div class="features-grid">
-            <div class="feature-card">
-                <div class="feature-icon">🥽</div>
-                <h4>{% trans "Extended Reality (XR)" %}</h4>
-                <p>
-                    {% trans "Augmenting real-world views with interactive digital content, blending physical and virtual experiences seamlessly." %}
-                </p>
-            </div>
-            <div class="feature-card">
-                <div class="feature-icon">🤖</div>
-                <h4>{% trans "AI-Powered Recognition" %}</h4>
-                <p>
-                    {% trans "Visual Tagging module identifies objects (art, buildings, nature) to trigger relevant content automatically." %}
-                </p>
-            </div>
-            <div class="feature-card">
-                <div class="feature-icon">🎬</div>
-                <h4>{% trans "Multimodal Content" %}</h4>
-                <p>
-                    {% trans "Supports text, audio, video, and images, engaging insights that bring heritage to life." %}
-                </p>
-            </div>
-            <div class="feature-card">
-                <div class="feature-icon">☁️</div>
-                <h4>{% trans "Cloud-Native Platform" %}</h4>
-                <p>
-                    {% trans "Scalable and accessible web-based authoring tool that works from anywhere, ensuring maximum reach and flexibility." %}
-                </p>
-            </div>
-            <div class="feature-card">
-                <div class="feature-icon">🎮</div>
-                <h4>{% trans "Gamification Elements" %}</h4>
-                <p>
-                    {% trans "Encouraging user engagement and social sharing within the mobile app through interactive challenges and rewards." %}
-                </p>
-            </div>
-            <div class="feature-card">
-                <div class="feature-icon">🌐</div>
-                <h4>{% trans "Multi-Language Support" %}</h4>
-                <p>
-                    {% trans "Making tours accessible to a wider, international audience with comprehensive language localization." %}
-                </p>
+                <img src="{% static 'xr_tour_guide_public/img/main.jpg' %}"
+                    alt="{% trans 'XR Tour Experience' %}"
+                    fetchpriority="high"
+                    decoding="async">
             </div>
         </div>
     </div>
@@ -1635,68 +1580,49 @@
         <div class="carousel-wrapper">
             <div id="useCaseCarousel" class="carousel slide" data-bs-ride="carousel" data-bs-interval="5000">
                 <div class="carousel-inner">
-                    <!-- Nilus Trail -->
                     <div class="carousel-item active">
                         <div class="use-case-card">
-                            {% if tours and tours.0.default_image %}
                             <img class="use-case-card-image"
-                                 src="{% url 'stream_minio_resource' %}?tour={{ tours.0.id }}&file={{ tours.0.default_image.name|urlencode }}"
-                                 alt="Nilus Trail">
-                            {% else %}
-                            <img class="use-case-card-image"
-                                 src="https://images.unsplash.com/photo-1555881400-74d7acaacd8b?w=800&q=80"
-                                 alt="Nilus Trail">
-                            {% endif %}
+                                src="{% static 'xr_tour_guide_public/img/use_cases/nilus_trail.jpg' %}" loading="lazy"
+                                decoding="async" alt="{% trans 'Nilus Trail' %}">
                             <div class="use-case-card-body">
                                 <h5>{% trans "Nilus Trail" %}</h5>
                                 <p>{% trans "Highlighting the historical route of Saint Nilus, increasing awareness of art, nature, and faith landmarks in the Byzantine Cilento (UNESCO site)." %}</p>
                             </div>
                         </div>
                     </div>
-                    
-                    <!-- Morigerati Heritage -->
+
                     <div class="carousel-item">
                         <div class="use-case-card">
-                            {% if tours and tours.1.default_image %}
                             <img class="use-case-card-image"
-                                 src="{% url 'stream_minio_resource' %}?tour={{ tours.1.id }}&file={{ tours.1.default_image.name|urlencode }}"
-                                 alt="Morigerati Heritage">
-                            {% else %}
-                            <img class="use-case-card-image"
-                                 src="https://images.unsplash.com/photo-1566127444183-e0413778e08c?w=800&q=80"
-                                 alt="Morigerati Heritage">
-                            {% endif %}
+                                src="{% static 'xr_tour_guide_public/img/use_cases/morigerati_heritage.jpg' %}"
+                                loading="lazy" decoding="async" alt="{% trans 'Morigerati Heritage' %}">
                             <div class="use-case-card-body">
                                 <h5>{% trans "Morigerati Heritage" %}</h5>
                                 <p>{% trans "Showcasing the Ethnographic Museum's collection, emphasizing local traditions and targeting diverse audiences." %}</p>
                             </div>
                         </div>
                     </div>
-                    
-                    <!-- MushroomMate -->
+
                     <div class="carousel-item">
                         <div class="use-case-card">
-                            {% if tours and tours.2.default_image %}
                             <img class="use-case-card-image"
-                                 src="{% url 'stream_minio_resource' %}?tour={{ tours.2.id }}&file={{ tours.2.default_image.name|urlencode }}"
-                                 alt="MushroomMate">
-                            {% else %}
-                            <img class="use-case-card-image"
-                                 src="https://images.unsplash.com/photo-1614252368597-39d90d7ff137?w=800&q=80"
-                                 alt="MushroomMate">
-                            {% endif %}
+                                src="{% static 'xr_tour_guide_public/img/use_cases/localproducts.jpg' %}" loading="lazy"
+                                decoding="async" alt="{% trans 'MushroomMate' %}">
                             <div class="use-case-card-body">
-                                <h5>{% trans "MushroomMate" %}</h5>
-                                <p>{% trans "Identifying local mushroom species and sharing traditional recipes, promoting food culture and knowledge transfer." %}</p>
+                                <h5>{% trans "LocalProducts" %}</h5>
+                                <p>{% trans "Explore local products around you, reveal origin and producer stories, get tasting tips, and visit purchase options." %}</p>
                             </div>
                         </div>
                     </div>
                 </div>
 
-                <button class="carousel-control-prev" type="button" data-bs-target="#useCaseCarousel" data-bs-slide="prev">
+                <button class="carousel-control-prev" type="button" data-bs-target="#useCaseCarousel"
+                    data-bs-slide="prev">
                     <span class="carousel-control-prev-icon"></span>
                 </button>
-                <button class="carousel-control-next" type="button" data-bs-target="#useCaseCarousel" data-bs-slide="next">
+                <button class="carousel-control-next" type="button" data-bs-target="#useCaseCarousel"
+                    data-bs-slide="next">
                     <span class="carousel-control-next-icon"></span>
                 </button>
             </div>
@@ -1704,45 +1630,53 @@
     </div>
 </section>
 
-<!-- IMPACT -->
+<!-- ACKNOWLEDGEMENTS -->
 <section class="impact" id="impact">
     <div class="impact-container">
         <div class="impact-header">
-            <div class="impact-label">{% trans "Expected Impact" %}</div>
-            <h2>{% trans "Creating Value" %}</h2>
+            <div class="impact-label">{% trans "Acknowledgements" %}</div>
+            <h2>{% trans "Acknowledgements" %}</h2>
             <p class="impact-subtitle">
-                {% trans "Generating social and economic value by leveraging local knowledge and assets." %}
+                {% trans "We would like to thank the people, institutions, and communities that contributed to the development of XRTourGuide." %}
             </p>
         </div>
         <div class="impact-grid">
-            <div class="impact-card">
-                <div class="impact-icon">📈</div>
-                <h4>{% trans "Boost Tourism" %}</h4>
-                <p>
-                    {% trans "Increase visitor flow year-round by offering new, engaging tours." %}
-                </p>
-            </div>
-            <div class="impact-card">
-                <div class="impact-icon">👥</div>
-                <h4>{% trans "Engage Community" %}</h4>
-                <p>
-                    {% trans "Raise cultural awareness and encourage citizen participation." %}
-                </p>
-            </div>
-            <div class="impact-card">
-                <div class="impact-icon">💼</div>
-                <h4>{% trans "Stimulate Economy" %}</h4>
-                <p>
-                    {% trans "Generate local job opportunities in content creation and tourism." %}
-                </p>
-            </div>
-            <div class="impact-card">
-                <div class="impact-icon">🌱</div>
-                <h4>{% trans "Promote Sustainability" %}</h4>
-                <p>
-                    {% trans "Support sustainable tourism and preserve cultural heritage." %}
-                </p>
-            </div>
+            <a class="impact-card" href="https://www.cmbussento.it/hh/index.php" target="_blank" rel="noopener noreferrer">
+                <img class="impact-card-image"
+                    src="{% static 'xr_tour_guide_public/img/acknowledgements/logo_bussento.jpg' %}"
+                    alt="{% trans 'Comunità Montana Bussento Lambro e Mingardo (CMBLM)' %}" loading="lazy" decoding="async">
+                <div class="impact-card-content">
+                    <h4>Comunità Montana Bussento Lambro e Mingardo (CMBLM)</h4>
+                </div>
+            </a>
+        
+            <a class="impact-card" href="https://www.scientificovallo.edu.it/" target="_blank" rel="noopener noreferrer">
+                <img class="impact-card-image"
+                    src="{% static 'xr_tour_guide_public/img/acknowledgements/liceo.jpg' %}"
+                    alt="{% trans 'Liceo Scientifico "Leonardo da Vinci" Vallo della Lucania - SA' %}" loading="lazy" decoding="async">
+                <div class="impact-card-content">
+                    <h4>Liceo Scientifico "Leonardo da Vinci" Vallo della Lucania - SA</h4>
+                </div>
+            </a>
+        
+            <a class="impact-card" href="https://www.caimontebulgheria.it/" target="_blank"
+                rel="noopener noreferrer">
+                <img class="impact-card-image"
+                    src="{% static 'xr_tour_guide_public/img/acknowledgements/cai.jpg' %}"
+                    alt="{% trans 'CAI - Monte Bulgheria' %}" loading="lazy" decoding="async">
+                <div class="impact-card-content">
+                    <h4>CAI - Monte Bulgheria</h4>
+                </div>
+            </a>
+        
+            <a class="impact-card" href="https://www.dandelionlab.org/en/home-eng/" target="_blank" rel="noopener noreferrer">
+                <img class="impact-card-image"
+                    src="{% static 'xr_tour_guide_public/img/acknowledgements/dandelion.jpg' %}"
+                    alt="{% trans 'Dandelion Social Innovation Lab' %}" loading="lazy" decoding="async">
+                <div class="impact-card-content">
+                    <h4>Dandelion Social Innovation Lab</h4>
+                </div>
+            </a>
         </div>
     </div>
 </section>
@@ -1763,13 +1697,72 @@
 </section>
 
 <!-- FOOTER -->
-<footer class="footer">
+<footer class="footer" id="footer">
     <div class="footer-content">
-        <p class="footer-brand">XR Tour Guide</p>
-        <p>{% trans "Part of the FUTURAL project, empowering the future through innovative smart solutions for rural areas." %}</p>
-        <p>&copy; 2025 XRTourGuide. {% trans "All rights reserved." %}</p>
+        <img src="{% static 'xr_tour_guide_public/img/futural-logo.png' %}" alt="{% trans 'FUTURAL Logo' %}"
+            class="footer-logo">
+
+        <p class="footer-description">
+            {% trans "XRTourGuide is part of the FUTURAL project, empowering the future through innovative smart solutions for rural areas." %}
+        </p>
+        <div class="footer-socials">
+            <a class="footer-social-link" href="https://www.facebook.com/XRTourGuide" target="_blank" rel="noopener noreferrer"
+                aria-label="Facebook">
+                <span class="footer-social-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24">
+                        <path
+                            d="M13.5 22v-8h2.7l.4-3h-3.1V9.1c0-.9.3-1.6 1.6-1.6H16.7V4.8c-.3 0-1.3-.1-2.4-.1-2.4 0-4 1.4-4 4.2V11H7.7v3h2.6v8h3.2Z" />
+                    </svg>
+                </span>
+                <span class="footer-social-label">Facebook</span>
+            </a>
+
+            <a class="footer-social-link" href="https://www.instagram.com/xrtourguide/" target="_blank" rel="noopener noreferrer"
+                aria-label="Instagram">
+                <span class="footer-social-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24">
+                        <path
+                            d="M7 2h10a5 5 0 0 1 5 5v10a5 5 0 0 1-5 5H7a5 5 0 0 1-5-5V7a5 5 0 0 1 5-5Zm0 2.2A2.8 2.8 0 0 0 4.2 7v10A2.8 2.8 0 0 0 7 19.8h10a2.8 2.8 0 0 0 2.8-2.8V7A2.8 2.8 0 0 0 17 4.2H7Zm10.5 1.6a.9.9 0 1 1 0 1.8.9.9 0 0 1 0-1.8ZM12 7a5 5 0 1 1 0 10 5 5 0 0 1 0-10Zm0 2.2A2.8 2.8 0 1 0 12 14.8 2.8 2.8 0 0 0 12 9.2Z" />
+                    </svg>
+                </span>
+                <span class="footer-social-label">Instagram</span>
+            </a>
+
+            <a class="footer-social-link" href="https://www.linkedin.com/company/xrtourguide?trk=public_post_feed-actor-name" target="_blank" rel="noopener noreferrer"
+                aria-label="LinkedIn">
+                <span class="footer-social-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24">
+                        <path
+                            d="M4.98 3.5a1.75 1.75 0 1 1 0 3.5 1.75 1.75 0 0 1 0-3.5ZM3.5 8.75h2.96V20.5H3.5V8.75Zm4.82 0h2.84v1.6H11.2c.4-.76 1.4-1.86 3.28-1.86 3.5 0 4.15 2.2 4.15 5.07v6.94h-2.96v-6.15c0-1.47-.03-3.36-2.14-3.36-2.14 0-2.47 1.6-2.47 3.25v6.26H8.32V8.75Z" />
+                    </svg>
+                </span>
+                <span class="footer-social-label">LinkedIn</span>
+            </a>
+
+            <a class="footer-social-link" href="https://xrtourguide.substack.com/?utm_id=97758_v0_s00_e232_tv0" target="_blank" rel="noopener noreferrer"
+                aria-label="Substack">
+                <span class="footer-social-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24">
+                        <path d="M4 3h16v2.5H4V3Zm0 4h16v2H4V7Zm0 3.5h16V21l-8-4-8 4V10.5Z" />
+                    </svg>
+                </span>
+                <span class="footer-social-label">Substack</span>
+            </a>
+        </div>
+        <p class="footer-eu-note">
+            {% trans "Co-funded by the European Union." %}
+        </p>
+        
+        <p class="footer-disclaimer">
+            {% trans "Views and opinions expressed are however those of the author(s) only and do not necessarily reflect those of the European Union or European Research Executive Agency. Neither the European Union nor the granting authority can be held responsible for them." %}
+        </p>
+        
+        <p class="footer-copyright">
+            &copy; 2025 XRTourGuide Consortium. {% trans "All rights reserved." %}
+        </p>
     </div>
 </footer>
+
 
 <script>
 // Navbar scroll effect

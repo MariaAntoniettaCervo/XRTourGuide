@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -22,32 +23,38 @@ import 'services/offline_tour_service.dart';
 import "dart:io";
 import "package:path_provider/path_provider.dart";
 import 'package:flutter_map_pmtiles/flutter_map_pmtiles.dart';
-import 'services/offline_recognition_service.dart';
 import 'dart:typed_data';
 import 'package:image/image.dart' as img;
 import 'package:permission_handler/permission_handler.dart';
 import 'package:dio/dio.dart';
 import 'package:archive/archive.dart';
 import 'package:flutter/foundation.dart';
+import 'services/analytics_service.dart';
 
 // Import for AR
-import 'package:ar_flutter_plugin/ar_flutter_plugin.dart';
-import 'package:ar_flutter_plugin/datatypes/config_planedetection.dart';
-import 'package:ar_flutter_plugin/datatypes/hittest_result_types.dart';
-import 'package:ar_flutter_plugin/datatypes/node_types.dart';
-import 'package:ar_flutter_plugin/managers/ar_location_manager.dart';
-import 'package:ar_flutter_plugin/managers/ar_session_manager.dart';
-import 'package:ar_flutter_plugin/managers/ar_object_manager.dart';
-import 'package:ar_flutter_plugin/managers/ar_anchor_manager.dart';
-import 'package:ar_flutter_plugin/models/ar_anchor.dart';
-import 'package:ar_flutter_plugin/models/ar_node.dart';
-import 'package:ar_flutter_plugin/models/ar_hittest_result.dart';
+import 'package:ar_flutter_plugin_plus/ar_flutter_plugin.dart';
+import 'package:ar_flutter_plugin_plus/datatypes/config_planedetection.dart';
+import 'package:ar_flutter_plugin_plus/datatypes/hittest_result_types.dart';
+import 'package:ar_flutter_plugin_plus/datatypes/node_types.dart';
+import 'package:ar_flutter_plugin_plus/managers/ar_location_manager.dart';
+import 'package:ar_flutter_plugin_plus/managers/ar_session_manager.dart';
+import 'package:ar_flutter_plugin_plus/managers/ar_object_manager.dart';
+import 'package:ar_flutter_plugin_plus/managers/ar_anchor_manager.dart';
+import 'package:ar_flutter_plugin_plus/models/ar_anchor.dart';
+import 'package:ar_flutter_plugin_plus/models/ar_node.dart';
+import 'package:ar_flutter_plugin_plus/models/ar_hittest_result.dart';
 import 'package:vector_math/vector_math_64.dart' as vector;
+import 'package:cached_network_image/cached_network_image.dart';
+import 'models/ARPlatformConfig.dart';
+import 'services/offline_recognition_isolate_service.dart';
+
 
 // New imports for media players/viewers
 import 'elements/pdf_viewer.dart';
 import 'elements/audio_player.dart';
 import 'elements/video_player.dart';
+import 'elements/zlib_image.dart';
+import 'utils/responsive.dart';
 
 // Enum for recognition states
 enum RecognitionState {
@@ -103,6 +110,9 @@ class ARCameraScreen extends ConsumerStatefulWidget {
   final double longitude;
   final int tourId;
   final bool isOffline;
+  final bool enableRecognition;
+  final int? initialWaypointId;
+  final String? tourType;
 
   ARCameraScreen({
     Key? key,
@@ -114,6 +124,9 @@ class ARCameraScreen extends ConsumerStatefulWidget {
     required this.latitude,
     required this.longitude,
     this.isOffline = false,
+    this.enableRecognition = true,
+    this.initialWaypointId,
+    this.tourType,
   }) : super(key: key);
 
   @override
@@ -126,7 +139,9 @@ class _ARCameraScreenState extends ConsumerState<ARCameraScreen>
   late ApiService _apiService;
   late LocalStateService _localStateService;
   late OfflineStorageService _offlineService;
-  OfflineRecognitionService? _offlineRecognitionService;
+  late AnalyticsService _analytics;
+  OfflineRecognitionIsolateService? _offlineRecognitionService;
+
   bool _isProcessingFrame = false;
 
 
@@ -134,9 +149,26 @@ class _ARCameraScreenState extends ConsumerState<ARCameraScreen>
   CameraController? _cameraController;
   List<CameraDescription>? _cameras;
   bool _isCameraInitialized = false;
+  double _minZoomLevel = 1.0;
+  double _maxZoomLevel = 1.0;
+  double _currentZoomLevel = 1.0;
+  double _baseZoomLevel = 1.0;
 
   // Recognition state
   RecognitionState _recognitionState = RecognitionState.ready;
+
+  String _recognitionFailureMessage = "";
+
+  final List<String> _recognitionFailureMessages = [
+    "rec_failure_1".tr(),
+    "rec_failure_2".tr(),
+    "rec_failure_3".tr(),
+    "rec_failure_4".tr(),
+    "rec_failure_5".tr(),
+    "rec_failure_6".tr(),
+    "rec_failure_7".tr(),
+    "rec_failure_8".tr(),
+  ];
 
   int _recognizedWaypointId = -1; // Store recognized waypoint ID
   Map<String, dynamic> _availableResources = {}; // Store available resources
@@ -182,17 +214,27 @@ class _ARCameraScreenState extends ConsumerState<ARCameraScreen>
   final List<File> _tempFiles = [];
 
   final Map<String, File> _cachedResources = {};
+  final Map<String, Map<String, dynamic>> _resourceMetaCache = {};
 
   //AR Variables
   bool _isARMode = false;
+  static const double _totemStartScale = 0.5;
+  static const double _totemTargetScale = 15.0;
+
   ARSessionManager? arSessionManager;
   ARObjectManager? arObjectManager;
   ARAnchorManager? arAnchorManager;
 
   ARNode? _totemBaseNode;
   ARNode? _totemBodyNode;
-  bool _totemSpawned = false;
 
+  ARNode? _totemMarkdownCardNode;
+  Timer? _markdownScrollTimer;
+  int _markdownScrollFrame = 0;
+  double _markdownMaxScrollOffset = 0.0;
+  bool _markdownScrollDown = true;
+
+  bool _totemSpawned = false;
 
   @override
   void initState() {
@@ -200,15 +242,34 @@ class _ARCameraScreenState extends ConsumerState<ARCameraScreen>
     _tourService = ref.read(tourServiceProvider);
     _apiService = ref.read(apiServiceProvider);
     _localStateService = LocalStateService();
+    _analytics = ref.read(analyticsServiceProvider);
     _offlineService = ref.read(offlineStorageServiceProvider);
-    _initializeCamera();
-    _getCurrentLocation();
+    if (widget.enableRecognition) {
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        if (!mounted) return;
+        await Future.delayed(const Duration(milliseconds: 200));
+        _initializeCamera();
+      });
+      _getCurrentLocation();
+      if (widget.isOffline) {
+        _initOfflineMap();
+        _initializeOfflineRecognizer();
+      }
+    } else {
+      _getCurrentLocation();
+    }
     _initializeAnimations();
-    _setInitialContent();
-    if (widget.isOffline) {
-      _initOfflineMap();
-      _initializeOfflineRecognizer();
-    } // Set initial content
+    // _setInitialContent();
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+
+      _setInitialContent();
+
+      if (!widget.enableRecognition) {
+        _enterStubRecognizedState();
+      }
+    });
   }
 
   @override
@@ -220,9 +281,125 @@ class _ARCameraScreenState extends ConsumerState<ARCameraScreen>
     _pulseAnimationController.dispose();
     _successAnimationController.dispose();
     _failureAnimationController.dispose();
-    _offlineRecognitionService?.dispose();
+    unawaited(_offlineRecognitionService?.dispose());
     _clearTempFiles();
+    _resourceMetaCache.clear();
+    _markdownScrollTimer?.cancel();
     super.dispose();
+  }
+
+  String _getRandomRecognitionFailureMessage() {
+    if (_recognitionFailureMessages.isEmpty) {
+      return "Recognition failed. Please try again.";
+    }
+
+    final randomIndex = Random().nextInt(_recognitionFailureMessages.length);
+    return _recognitionFailureMessages[randomIndex];
+  }
+
+  Future<Map<String, dynamic>> _getResourceWithMetaCache(int waypointId, String resourceType) async {
+    final key = "$waypointId:$resourceType";
+    final cached = _resourceMetaCache[key];
+    if (cached != null) return cached;
+
+    final response = await _tourService.getResourceByWaypointAndType(waypointId, resourceType);
+    final map = (response as Map<String, dynamic>);
+    _resourceMetaCache[key] = map;
+    return map;
+  }
+
+  Future<void> _enterStubRecognizedState() async {
+    try{
+      await _getTourWaypoints();
+
+      final recognizableWaypoints = _waypoints.where((wp) => !wp.isPreliminaryInfo).toList();
+
+      int waypointId = widget.initialWaypointId ?? -1;
+      if (waypointId == -1){
+        if (recognizableWaypoints.isNotEmpty) waypointId = recognizableWaypoints.first.id;
+      }
+
+      Waypoint? wp;
+      try {
+        wp = recognizableWaypoints.firstWhere((w) => w.id == waypointId);
+      } catch(e) {
+        wp = null;
+      }
+
+      if (wp != null) {
+        widget.landmarkName = wp.title;
+        widget.landmarkDescription = wp.description;
+        widget.landmarkImages = wp.images;
+      }
+
+      final Map<String, dynamic> available = {
+        "readme" : 0,
+        "links" : 0,
+        "pdf" : 0,
+        "audio" : 0,
+        "video" : 0,
+        "images" : 0
+      };
+
+      if (waypointId != -1) {
+        if (widget.isOffline) {
+          final imgs = _offlineImagesByWaypoint[waypointId] ?? [];
+          if (imgs.isNotEmpty) available["images"] = 1;
+          final res = _offlineResourcesByWaypoint[waypointId] ?? {};
+          res.forEach((k, v) {
+            if (v is String && v.isNotEmpty) available[k] = 1;
+          });
+        } else {
+          final types = ["readme", "links", "images", "video", "pdf", "audio"];
+
+          await Future.wait(
+            types.map((t) async {
+              try {
+                final resp = await _getResourceWithMetaCache(waypointId, t);
+                if (resp.isNotEmpty) {
+                  if (t == "images") {
+                    final imgs = (resp["images"] as List?) ?? const [];
+                    if (imgs.isNotEmpty) available["images"] = 1;
+                  } else if (t == "links") {
+                    final links = (resp["links"] as List?) ?? const [];
+                    if (links.isNotEmpty) available["links"] = 1;
+                  } else {
+                    final url = resp["url"] ?? resp[t];
+                    if (url is String && url.isNotEmpty) available[t] = 1;
+                  }
+                }
+              } catch (_) {}
+            }),
+          );
+        }
+      }
+
+      setState(() {
+        _recognizedWaypointId = waypointId;
+        _availableResources = available;
+        _currentMarkdownContent = "# ${widget.landmarkName}\n\n${widget.landmarkDescription}";
+        _currentActiveContent = MarkdownWidget(
+          data: _currentMarkdownContent,
+          config: _buildMarkdownConfig(),
+          padding: const EdgeInsets.only(top: 0),
+          shrinkWrap: true,
+        );
+        _recognitionState = RecognitionState.success;
+      });
+      _successAnimationController.reset();
+      _successAnimationController.forward();
+      _sheetController.animateTo(
+        _initialSheetSize + 0.20,
+        duration: const Duration(milliseconds: 500),
+        curve: Curves.easeInOut,
+      );
+      _startAROverlayAnimation();
+    } catch(e) {
+      debugPrint("Error entering stub recognized state: $e");
+      _totemBodyNode = null;
+      _arNodeToResourceType.clear();
+      _showError("tour_initial_content_error".tr());
+    }
   }
 
 
@@ -239,25 +416,36 @@ class _ARCameraScreenState extends ConsumerState<ARCameraScreen>
       arAnchorManager = null;
       _totemSpawned = false;
       _totemBaseNode = null;
+      _totemBodyNode = null;
+      _totemMarkdownCardNode = null;
+      _markdownScrollTimer?.cancel();
+
+      unawaited(_analytics.logEvent(name: "exit_ar_mode", parameters: {"tour_id": widget.tourId, "waypoint_id": _recognizedWaypointId}));
 
       await Future.delayed(const Duration(milliseconds: 500));
-      await _initializeCamera();
-    } else {
-      // Switching from Standard to AR
-      if (_cameraController != null) {
-        await _cameraController!.dispose();
-        _cameraController = null;
+      if (mounted) {
+        await _initializeCamera();
       }
+    } else {
+      final oldController = _cameraController;
+      // Switching from Standard to AR
 
       setState(() {
+        _cameraController = null;
         _isCameraInitialized = false;
       });
 
+      await oldController?.dispose();
+
       await Future.delayed(const Duration(milliseconds: 500));
+
+      if (!mounted) return;
 
       setState(() {
         _isARMode = true;
       });
+
+      unawaited(_analytics.logEvent(name: "enter_ar_mode", parameters: {"tour_id": widget.tourId, "waypoint_id": _recognizedWaypointId}));
     }
   }
 
@@ -270,7 +458,7 @@ class _ARCameraScreenState extends ConsumerState<ARCameraScreen>
         _futureTileProvider = PmTilesTileProvider.fromSource(_pmtilesPath!);
       });
     } else {
-      print("PMTiles file not found at $path");
+      debugPrint("PMTiles file not found at $path");
     }
   }
 
@@ -291,7 +479,7 @@ class _ARCameraScreenState extends ConsumerState<ARCameraScreen>
     if (_cachedResources.containsKey(sourcePath)) {
       final cachedFile = _cachedResources[sourcePath]!;
       if(await cachedFile.exists()) {
-        print("Using cached resource for $sourcePath");
+        debugPrint("Using cached resource for $sourcePath");
         return cachedFile;
       } else {
         _cachedResources.remove(sourcePath);
@@ -333,12 +521,12 @@ class _ARCameraScreenState extends ConsumerState<ARCameraScreen>
       _tempFiles.add(tempFile);
       _cachedResources[sourcePath] = tempFile;
 
-      print("Decompressed resource saved to ${tempFile.path}");
+      debugPrint("Decompressed resource saved to ${tempFile.path}");
       return tempFile;
 
     } catch(e) {
-      print("Error during handling of ZLib Resource: $e");
-      _showError( "Error during handling of ZLib Resource");
+      debugPrint("Error during handling of ZLib Resource: $e");
+      _showError("error_loading_resource".tr());
       return null;
     }
   }
@@ -348,10 +536,10 @@ class _ARCameraScreenState extends ConsumerState<ARCameraScreen>
       try{
         if (await file.exists()) {
           await file.delete();
-          print("Deleted temp file: ${file.path}");
+          debugPrint("Deleted temp file: ${file.path}");
         }
       } catch(e) {
-        print("Error deleting temp file ${file.path}: $e");
+        debugPrint("Error deleting temp file ${file.path}: $e");
       }
     }
     _tempFiles.clear();
@@ -382,20 +570,24 @@ class _ARCameraScreenState extends ConsumerState<ARCameraScreen>
 
     return TileLayer(
       urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-      userAgentPackageName: 'com.isislab.xrtourguide',
+      userAgentPackageName: 'com.picaresque.xrtourguide',
       tileProvider: NetworkTileProvider(),
     );
   }
 
   Future<void> _initializeOfflineRecognizer() async {
     try {
-      _offlineRecognitionService = OfflineRecognitionService();
-      await _offlineRecognitionService!.initEmbedderFromAsset('assets/models/ResNet50.tflite');
-      await _offlineRecognitionService!.initIndexForTour(widget.tourId);
-      print('Offline recognizer initialized for tour ${widget.tourId}');
+      _offlineRecognitionService = OfflineRecognitionIsolateService();
+
+      await _offlineRecognitionService!.init(
+        tourId: widget.tourId,
+        modelAssetPath: 'assets/models/EfficientNetLite0.tflite',
+      );
+
+      debugPrint('Offline recognizer isolate initialized for tour ${widget.tourId}');
     } catch (e) {
-      print('Error initializing offline recognizer: $e');
-      _showError('Error initializing offline recognizer.');
+      debugPrint('Error initializing offline recognizer isolate: $e');
+      _showError('error_initializing_recognizer'.tr());
     }
   }
 
@@ -406,18 +598,19 @@ class _ARCameraScreenState extends ConsumerState<ARCameraScreen>
 
       final status = await Permission.camera.status;
       if (status.isPermanentlyDenied) {
-        _showError('Camera permission is permanently denied. Please enable it from settings.');
+        _showError('camera_permission_error'.tr());
         await openAppSettings();
         return;
       }
       final camStatus = await Permission.camera.request();
-      print("Camera permission status: $camStatus");
+      debugPrint("Camera permission status: $camStatus");
       if (!camStatus.isGranted) {
-        _showError('Camera permission is required for recognition.');
+        _showError('camera_permission_error'.tr());
         return;
       }
 
       _cameras = await availableCameras();
+      debugPrint("Available cameras: ${_cameras!.map((c) => c.name).join(", ")}");
       if (_cameras != null && _cameras!.isNotEmpty) {
         final controller = CameraController(
           _cameras![0], // Use the first camera (usually back camera)
@@ -428,6 +621,10 @@ class _ARCameraScreenState extends ConsumerState<ARCameraScreen>
 
 
         await controller.initialize();
+        _minZoomLevel = await controller.getMinZoomLevel();
+        _maxZoomLevel = await controller.getMaxZoomLevel();
+        _currentZoomLevel = _minZoomLevel;
+        await controller.setZoomLevel(_currentZoomLevel);
         if (!mounted) return;
 
         if (_isARMode) {
@@ -445,7 +642,26 @@ class _ARCameraScreenState extends ConsumerState<ARCameraScreen>
 
       }
     } catch (e) {
-      print('Error initializing camera: $e');
+      debugPrint('Error initializing camera: $e');
+    }
+  }
+
+  void _handleScaleStart(ScaleStartDetails details) {
+    _baseZoomLevel = _currentZoomLevel;
+  }
+
+  Future<void> _handleScaleUpdate(ScaleUpdateDetails details) async {
+    if (_cameraController == null || !_isCameraInitialized) return;
+
+    final newZoom = (_baseZoomLevel * details.scale).clamp(_minZoomLevel, _maxZoomLevel);
+
+    if ((newZoom - _currentZoomLevel).abs() < 0.02) return;
+
+    _currentZoomLevel = newZoom;
+    await _cameraController!.setZoomLevel(_currentZoomLevel);
+
+    if (mounted) {
+      setState(() {});
     }
   }
 
@@ -460,16 +676,18 @@ class _ARCameraScreenState extends ConsumerState<ARCameraScreen>
       arAnchorManager = anchorManager;
 
       arSessionManager!.onInitialize(
-        showFeaturePoints: false,
+        showFeaturePoints: true,
         showPlanes: true,
         showWorldOrigin: false,
         handlePans: false,
         handleRotation: false,
+        handleTaps: true,
       );
 
-      arObjectManager!.onInitialize();
-
-      arObjectManager!.onNodeTap = _onARNodeTap;
+      arObjectManager!.onInitialize(
+        androidScaleFactor: 1.0,
+        iosScaleFactor: 0.01,
+      );
 
       arSessionManager!.onPlaneOrPointTap = _onPlaneTap;
   }
@@ -477,137 +695,660 @@ class _ARCameraScreenState extends ConsumerState<ARCameraScreen>
   Future<void> _onPlaneTap(List<ARHitTestResult> hits) async {
     if (_recognitionState != RecognitionState.success || _totemSpawned) {
       if(_recognitionState != RecognitionState.success) {
-        _showError("Esegui prima il riconoscimento");
+        _showError("firs_recognition".tr());
       }
       return;
     }
 
-    var hit = hits.firstWhere((element) => element.type == ARHitTestResultType.plane);
+    // var hit = hits.firstWhere((element) => element.type == ARHitTestResultType.plane);
+    final planeHits = hits.where((h) => h.type == ARHitTestResultType.plane).toList();
+    if (planeHits.isEmpty) {
+      _showError("ar_instruction".tr());
+      return;
+    }
+    final hit = planeHits.first;
     var anchor = ARPlaneAnchor(transformation: hit.worldTransform);
     bool? didAddAnchor = await arAnchorManager?.addAnchor(anchor);
 
     if (didAddAnchor == true) {
-      _totemSpawned = true;
-      arSessionManager!.onInitialize(showPlanes: false);
+      setState(() {
+        _totemSpawned = true;
+      });
+      // arSessionManager!.onInitialize(showPlanes: false);
+      // arSessionManager?.showPlanes(false);
       _spawnAndAnimateTotem(anchor);
     }
   }
 
-
   Future<void> _spawnAndAnimateTotem(ARPlaneAnchor anchor) async {
-    var structureNode = ARNode(
-      type: NodeType.localGLTF2,
-      uri: "assets/models/AR/totem_base/totem_base.gltf",
-      scale: vector.Vector3(0.5, 0.5, 0.5),
-      position: vector.Vector3(0, 0, 0),
-      rotation: vector.Vector4(1.0, 0.0, 0.0, 0.0)
+    final manager = arObjectManager;
+    if (manager == null) return;
+
+    final cfg = arPlatformCfg;
+    final double initialVisualScale =
+        _totemStartScale * cfg.modelScaleCompensation;
+
+    final structureNode = ARNode(
+      type: NodeType.localGLB,
+      uri: "assets/models/AR/totem_base/totem_base.glb",
+      scale: vector.Vector3(
+        initialVisualScale,
+        initialVisualScale,
+        initialVisualScale,
+      ),
+      position: vector.Vector3(0, cfg.totemOffsetY, 0),
+      rotation: vector.Vector4(1.0, 0.0, 0.0, 0.0),
     );
 
-    bool? didAddNode = await arObjectManager?.addNode(structureNode, planeAnchor: anchor);
-    _totemBaseNode = structureNode;
+    final bool? didAddBase = await manager.addNode(
+      structureNode,
+      planeAnchor: anchor,
+    );
 
-    if (didAddNode == true) {
-
-      var bodyNode = ARNode(
-        type: NodeType.localGLTF2,
-        uri: "assets/models/AR/totem_body/totem_body.gltf",
-        scale: vector.Vector3(0.5, 0.5, 0.5),
-        position: vector.Vector3(0, 0, 0),
-        rotation: vector.Vector4(1.0, 0.0, 0.0, 0.0),
-      );
-
-      bool? didAddBody = await arObjectManager?.addNode(bodyNode, planeAnchor: anchor);
-      if (didAddBody == true) {
-        _totemBodyNode = bodyNode;
-      } else {
-        print("[DEBUG] Failed to add Totem Body Node");
-      }
-
-      double currentScale = 0.01;
-      double targetScale = 15.0;
-
-      Timer.periodic(const Duration(milliseconds: 20), (timer) {
-        currentScale += 0.1;
-        if (currentScale >= targetScale) {
-          currentScale = targetScale;
-          timer.cancel();
-          _spawnTotemIcons(anchor);
-        }
-        _totemBaseNode!.scale = vector.Vector3(currentScale, currentScale, currentScale);
-        if (_totemBodyNode != null) {
-          _totemBodyNode!.scale = vector.Vector3(currentScale, currentScale, currentScale);
-        }
-      });      
-    }
-  }
-
-  final Map<String, String> _arNodeToResourceType = {};
-
-  Future<void> _spawnTotemIcons(ARPlaneAnchor anchor) async {
-    if (_totemBaseNode == null) {
+    if (didAddBase != true) {
+      _totemSpawned = false;
+      debugPrint("[DEBUG] Failed to add Totem Base Node");
       return;
     }
 
-    double currentTotemScale = _totemBaseNode!.scale.x;
-    double scaleRatio = currentTotemScale / 0.5;
+    _totemBaseNode = structureNode;
 
-    final iconsData =
-        _getAvailableIconsData().where((e) => e['isVisible'] == true).toList();
+    final vector.Vector4 totemBodyRotation = Platform.isIOS
+      ? vector.Vector4(1.0, 0.0, 0.0, 0.0)
+      : vector.Vector4(1.0, 0.0, 0.0, 0.0);
 
-    // Configurazione Griglia sul Totem
-    // Questi valori dipendono dalle dimensioni del tuo modello 3D 'totem_base.glb'
-    double startX = -0.0035 * scaleRatio; // Sposta a sinistra
-    double startY = 0.034 * scaleRatio; // Altezza dello schermo
-    double gapX = 0.006 * scaleRatio; // Spazio orizzontale tra icone
-    double gapY = 0.006 * scaleRatio; // Spazio verticale
+    final String totemBodyUri = Platform.isIOS
+      ? "assets/models/AR/totem_body/totem_body_ios.glb"
+      : "assets/models/AR/totem_body/totem_body.glb";
 
-    int columns = 2; // Icone per riga
+    final bodyNode = ARNode(
+      type: NodeType.localGLB,
+      uri: totemBodyUri,
+      scale: vector.Vector3(
+        initialVisualScale,
+        initialVisualScale,
+        initialVisualScale,
+      ),
+      position: vector.Vector3(0, cfg.totemOffsetY, 0),
+      rotation: totemBodyRotation,
+    );
 
-    for (int i = 0; i < iconsData.length; i++) {
-      final data = iconsData[i];
+    final bool? didAddBody = await manager.addNode(
+      bodyNode,
+      planeAnchor: anchor,
+    );
 
-      // Calcolo posizione in griglia
-      int row = i ~/ columns;
-      int col = i % columns;
-      double x = startX + (col * gapX);
-      double y = startY - (row * gapY);
-      double z = 0.001 * scaleRatio;
-
-      var iconNode = ARNode(
-        type: NodeType.localGLTF2,
-        uri: data['modelPath'],
-        scale: vector.Vector3(0.1 * scaleRatio, 0.1 * scaleRatio, 0.1 * scaleRatio), // Dimensione icona
-        position: vector.Vector3(x, y, z), // Z=0.15 per farlo "uscire" dallo schermo
-        rotation: vector.Vector4(1.0, 0.0, 0.0, 0.0),
-      );
-
-      bool? didAdd = await arObjectManager!.addNode(iconNode, planeAnchor: anchor);
-      if (didAdd == true && iconNode.name != null) {
-        // Memorizziamo che questo nodo corrisponde a questo tipo di risorsa
-        _arNodeToResourceType[iconNode.name!] = data['type'];
-      } else {
-        print("[DEBUG]: Failed to add Node for ${data['label']}");
-      }
-    }
-  }
-
-  void _onARNodeTap(List<String> nodeNames) {
-    if (_totemBaseNode != null && _totemBaseNode!.name != null) {
-      nodeNames.remove(_totemBaseNode!.name);
+    if (didAddBody == true) {
+      _totemBodyNode = bodyNode;
+    } else {
+      debugPrint("[DEBUG] Failed to add Totem Body Node");
     }
 
-    // Cerchiamo se uno dei nodi toccati è nella nostra mappa di icone
-    for (var nodeName in nodeNames) {
-      if (_arNodeToResourceType.containsKey(nodeName)) {
-        String type = _arNodeToResourceType[nodeName]!;
-        print("AR Icon Tapped: $type");
+    // Crescita "logica" identica tra piattaforme.
+    double currentLogicalScale = 0.01;
 
-        _updateDraggableSheetContent(type, _recognizedWaypointId);
-
+    Timer.periodic(const Duration(milliseconds: 20), (timer) {
+      if (!mounted || _totemBaseNode == null) {
+        timer.cancel();
         return;
       }
+
+      currentLogicalScale += 0.1;
+      if (currentLogicalScale >= _totemTargetScale) {
+        currentLogicalScale = _totemTargetScale;
+        timer.cancel();
+        _spawnTotemMarkdownCard(anchor, currentLogicalScale);
+      }
+
+      final double visualScale =
+          currentLogicalScale * cfg.modelScaleCompensation;
+
+      final nextScale = vector.Vector3(visualScale, visualScale, visualScale);
+      _totemBaseNode?.scale = nextScale;
+      _totemBodyNode?.scale = nextScale;
+    });
+  }
+
+  Future<void> _spawnTotemMarkdownCard(
+    ARPlaneAnchor anchor,
+    double logicalTotemScale,
+  ) async {
+    final manager = arObjectManager;
+    if (manager == null) return;
+
+    final cfg = arPlatformCfg;
+
+    final String title =
+        widget.landmarkName.trim().isNotEmpty
+            ? widget.landmarkName.trim()
+            : "Waypoint";
+
+    final String readmeMarkdown = await _loadReadmeMarkdownForTotem();
+
+    _markdownMaxScrollOffset = _calculateMarkdownMaxScrollOffset(
+      readmeMarkdown,
+    );
+
+    final String cardGltfPath = await _createTotemMarkdownCardGltf(
+      title: title,
+      markdown: readmeMarkdown,
+      scrollOffset: 0,
+      frameIndex: 0,
+    );
+
+    final double cardScale = 0.2 * cfg.modelScaleCompensation;
+    final double cardScaleIOS = 20 * cfg.modelScaleCompensation;
+    final vector.Vector3 cardPosition = Platform.isIOS
+      ? vector.Vector3(-0.01, 0.9, 0.03)
+      : vector.Vector3(-0.01, 0.9, -0.03);
+    final vector.Vector4 cardRotation = Platform.isIOS
+        ? vector.Vector4(0.0, 1.0, 0.0, 0.0)
+        : vector.Vector4(1.0, 0.0, 0.0, 0.0);
+    final vector.Vector3 cardScaleVector = Platform.isIOS
+      ? vector.Vector3(cardScaleIOS, cardScaleIOS, cardScaleIOS)
+      : vector.Vector3(cardScale , cardScale, cardScale);
+
+    final cardNode = ARNode(
+      type: NodeType.fileSystemAppFolderGLTF2,
+      uri: cardGltfPath,
+      scale: cardScaleVector,
+      position: cardPosition,
+      rotation: cardRotation,
+      name: "[#]totem_markdown_card",
+    );
+
+    final bool? didAdd = await manager.addNode(cardNode, planeAnchor: anchor);
+
+    debugPrint(
+      '[AR DEBUG] Markdown panel didAdd=$didAdd, '
+      'maxScroll=$_markdownMaxScrollOffset, '
+      'position=$cardPosition, '
+      'scale=$cardScale',
+    );
+
+    if (didAdd == true) {
+      _totemMarkdownCardNode = cardNode;
+
+      if (mounted) {
+        setState(() {
+          _currentActiveContent = _buildResourceButtonsContent();
+        });
+      }
+
+      _sheetController.animateTo(
+        _initialSheetSize + 0.15,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeInOut,
+      );
+
+      if (_markdownMaxScrollOffset > 8) {
+        _startMarkdownAutoScroll(
+          anchor: anchor,
+          title: title,
+          markdown: readmeMarkdown,
+          maxScrollOffset: _markdownMaxScrollOffset,
+        );
+      }
+    } else {
+      debugPrint("[DEBUG] Failed to add Totem Markdown Card Node");
     }
   }
+
+  Future<String> _loadReadmeMarkdownForTotem() async {
+    try {
+      Map<String, dynamic> content = {};
+
+      if (widget.isOffline) {
+        final resources =
+            _offlineResourcesByWaypoint[_recognizedWaypointId] ?? {};
+        content = {'readme': resources['readme']};
+      } else {
+        content = await _getResourceWithMetaCache(
+          _recognizedWaypointId,
+          'readme',
+        );
+
+        if (content.containsKey('url')) {
+          content['readme'] = content['url'];
+        }
+      }
+
+      final String readmePath = (content['readme'] ?? '').toString();
+
+      if (readmePath.isEmpty) {
+        return widget.landmarkDescription.trim().isNotEmpty
+            ? widget.landmarkDescription.trim()
+            : 'Nessun contenuto markdown disponibile.';
+      }
+
+      final File? textFile = await _loadAndDecompressResource(
+        readmePath,
+        widget.isOffline,
+        'md',
+      );
+
+      if (textFile == null) {
+        return widget.landmarkDescription.trim().isNotEmpty
+            ? widget.landmarkDescription.trim()
+            : 'Errore nel caricamento del contenuto markdown.';
+      }
+
+      return await textFile.readAsString();
+    } catch (e) {
+      debugPrint('[AR DEBUG] Error loading readme markdown for totem: $e');
+
+      return widget.landmarkDescription.trim().isNotEmpty
+          ? widget.landmarkDescription.trim()
+          : 'Errore nel caricamento del contenuto markdown.';
+    }
+  }
+
+  Future<String> _createTotemMarkdownCardGltf({
+      required String title,
+      required String markdown,
+      required double scrollOffset,
+      required int frameIndex,
+    }) async {
+      final Directory dir = await getApplicationDocumentsDirectory();
+
+      final Directory cardDir = Directory('${dir.path}/ar_markdown_card');
+      if (!await cardDir.exists()) {
+        await cardDir.create(recursive: true);
+      }
+
+      final String pngFileName = 'totem_markdown_card_$frameIndex.png';
+      final String gltfFileName = 'totem_markdown_card_$frameIndex.gltf';
+
+      final String pngPath = '${cardDir.path}/$pngFileName';
+      final String gltfPath = '${cardDir.path}/$gltfFileName';
+
+      // final String title = widget.landmarkName.trim();
+      // final String readmeMarkdown = await _loadReadmeMarkdownForTotem();
+
+      final Uint8List pngBytes = await _renderTotemMarkdownCardPng(
+        title: title,
+        markdown: markdown,
+        scrollOffset: scrollOffset,
+      );
+
+      await File(pngPath).writeAsBytes(pngBytes, flush: true);
+
+      final String gltf = _buildTexturedCardPlaneGltf(imageFileName: pngFileName);
+
+      await File(gltfPath).writeAsString(gltf, flush: true);
+
+      if (Platform.isIOS) {
+        return 'ar_markdown_card/$gltfFileName';
+      }
+      return gltfPath;
+    }
+
+  double _calculateMarkdownMaxScrollOffset(String markdown) {
+    const double width = 740;
+    const double height = 1000;
+
+    const Rect bodyRect = Rect.fromLTWH(36, 150, width - 72, height - 190);
+
+    final String cleanedMarkdown = _cleanMarkdownForTotem(markdown);
+
+    final TextPainter bodyPainter = TextPainter(
+      text: TextSpan(
+        text: cleanedMarkdown,
+        style: const TextStyle(color: Colors.black, fontSize: 30, height: 1.20),
+      ),
+      textDirection: ui.TextDirection.ltr,
+    );
+
+    bodyPainter.layout(maxWidth: bodyRect.width);
+
+    final double overflow = bodyPainter.height - bodyRect.height;
+
+    return overflow > 0 ? overflow : 0.0;
+  }
+
+  Future<Uint8List> _renderTotemMarkdownCardPng({
+    required String title,
+    required String markdown,
+    required double scrollOffset,
+  }) async {
+    const double width = 740;
+    const double height = 1000;
+
+    final ui.PictureRecorder recorder = ui.PictureRecorder();
+    final Canvas canvas = Canvas(recorder);
+
+    final Paint backgroundPaint = Paint() ..color = Colors.white;
+
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        const Rect.fromLTWH(0, 0, width, height),
+        const Radius.circular(40),
+      ),
+      backgroundPaint,
+    );
+
+    final Paint borderPaint = Paint()
+      ..color = const Color(0xFF222222)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 4.0;
+
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        const Rect.fromLTWH(8, 8, width - 16, height - 16),
+        const Radius.circular(34),
+      ),
+      borderPaint,
+    );
+
+    final TextPainter titlePainter = TextPainter(
+      text: TextSpan(
+        text: title,
+        style: const TextStyle(
+          color: Colors.black,
+          fontSize: 46,
+          fontWeight: FontWeight.bold,
+          height: 1.05,
+        ),
+      ),
+      textDirection: ui.TextDirection.ltr,
+      maxLines: 2,
+      ellipsis: '...',
+    );
+
+    titlePainter.layout(maxWidth: width - 72);
+    titlePainter.paint(canvas, const Offset(36, 40));
+
+    final String cleanedMarkdown = _cleanMarkdownForTotem(markdown);
+
+    const Rect bodyRect = Rect.fromLTWH(36, 150, width - 72, height - 190);
+
+    canvas.save();
+    canvas.clipRect(bodyRect);
+
+    final TextPainter bodyPainter = TextPainter(
+      text: TextSpan(
+        text: cleanedMarkdown,
+        style: const TextStyle(color: Colors.black, fontSize: 30, height: 1.20),
+      ),
+      textDirection: ui.TextDirection.ltr,
+    );
+
+    bodyPainter.layout(maxWidth: bodyRect.width);
+
+    bodyPainter.paint(
+      canvas,
+      Offset(bodyRect.left, bodyRect.top - scrollOffset),
+    );
+
+    canvas.restore();
+    final ui.Picture picture = recorder.endRecording();
+    final ui.Image image = await picture.toImage(
+      width.toInt(),
+      height.toInt(),
+    );
+
+    final ByteData? byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+
+    return byteData!.buffer.asUint8List();
+  }
+
+  void _startMarkdownAutoScroll({
+    required ARPlaneAnchor anchor,
+    required String title,
+    required String markdown,
+    required double maxScrollOffset,
+  }) {
+    _markdownScrollTimer?.cancel();
+
+    double scrollOffset = 0.0;
+    _markdownScrollFrame = 0;
+    _markdownScrollDown = true;
+
+    int pauseTicks = 0;
+
+    _markdownScrollTimer = Timer.periodic(const Duration(milliseconds: 700), (
+      timer,
+    ) async {
+      if (!mounted || arObjectManager == null) {
+        timer.cancel();
+        return;
+      }
+
+      final oldNode = _totemMarkdownCardNode;
+      if (oldNode == null) {
+        timer.cancel();
+        return;
+      }
+
+      if (pauseTicks > 0) {
+        pauseTicks--;
+        return;
+      }
+
+      const double step = 24.0;
+
+      if (_markdownScrollDown) {
+        scrollOffset += step;
+
+        if (scrollOffset >= maxScrollOffset) {
+          scrollOffset = maxScrollOffset;
+          _markdownScrollDown = false;
+          pauseTicks = 3;
+        }
+      } else {
+        scrollOffset -= step;
+
+        if (scrollOffset <= 0) {
+          scrollOffset = 0;
+          _markdownScrollDown = true;
+          pauseTicks = 3;
+        }
+      }
+
+      _markdownScrollFrame++;
+
+      final String cardGltfPath = await _createTotemMarkdownCardGltf(
+        title: title,
+        markdown: markdown,
+        scrollOffset: scrollOffset,
+        frameIndex: _markdownScrollFrame,
+      );
+
+      final cfg = arPlatformCfg;
+      final double cardScale = 0.2 * cfg.modelScaleCompensation;
+      final vector.Vector3 cardPosition = vector.Vector3(-0.01, 0.9, -0.03);
+      final vector.Vector4 cardRotation = Platform.isIOS
+          ? vector.Vector4(0.0, 1.0, 0.0, 0.0)
+          : vector.Vector4(1.0, 0.0, 0.0, 0.0);
+
+      arObjectManager!.removeNode(oldNode);
+
+      final newNode = ARNode(
+        type: NodeType.fileSystemAppFolderGLTF2,
+        uri: cardGltfPath,
+        scale: vector.Vector3(cardScale, cardScale, cardScale),
+        position: cardPosition,
+        rotation: cardRotation,
+        name: "[#]totem_markdown_card_$_markdownScrollFrame",
+      );
+
+      final bool? didAdd = await arObjectManager!.addNode(
+        newNode,
+        planeAnchor: anchor,
+      );
+
+      if (didAdd == true) {
+        _totemMarkdownCardNode = newNode;
+      }
+    });
+  }
+
+  String _cleanMarkdownForTotem(String markdown) {
+    return markdown
+        .replaceAll(RegExp(r'!\[[^\]]*\]\([^)]+\)'), '')
+        .replaceAll(RegExp(r'\[([^\]]+)\]\([^)]+\)'), r'$1')
+        .replaceAll(RegExp(r'#{1,6}\s*'), '')
+        .replaceAll(RegExp(r'[*_`>~]'), '')
+        .replaceAll(RegExp(r'\n{3,}'), '\n\n')
+        .trim();
+  }
+
+  String _buildTexturedCardPlaneGltf({required String imageFileName}) {
+    final ByteData data = ByteData(92);
+
+    int offset = 0;
+
+    void writeFloat(double value) {
+      data.setFloat32(offset, value, Endian.little);
+      offset += 4;
+    }
+
+    void writeUint16(int value) {
+      data.setUint16(offset, value, Endian.little);
+      offset += 2;
+    }
+
+    // POSITION: 4 vertices, aspect ratio 4:3.
+    final List<double> positions = [
+      -1.0, 1.35, 0.0,
+      1.0, 1.35, 0.0,
+      1.0, -1.35, 0.0,
+      -1.0, -1.35, 0.0,
+    ];
+
+    for (final double value in positions) {
+      writeFloat(value);
+    }
+
+    // TEXCOORD_0
+    // final List<double> uvs = [1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0];
+    final List<double> uvs =
+        Platform.isIOS
+            ? [0.0, 0.0, 1.0, 0.0, 1.0, 1.0, 0.0, 1.0]
+            : [1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0];
+
+    for (final double value in uvs) {
+      writeFloat(value);
+    }
+
+    // Indices
+    final List<int> indices = [0, 2, 1, 0, 3, 2];
+
+    for (final int value in indices) {
+      writeUint16(value);
+    }
+
+    final String bufferBase64 = base64Encode(data.buffer.asUint8List());
+
+    return '''
+{
+  "asset": {
+    "version": "2.0"
+  },
+  "scene": 0,
+  "scenes": [
+    {
+      "nodes": [0]
+    }
+  ],
+  "nodes": [
+    {
+      "mesh": 0,
+      "name": "totem_markdown_card"
+    }
+  ],
+  "meshes": [
+    {
+      "primitives": [
+        {
+          "attributes": {
+            "POSITION": 0,
+            "TEXCOORD_0": 1
+          },
+          "indices": 2,
+          "material": 0
+        }
+      ]
+    }
+  ],
+  "materials": [
+    {
+      "name": "card_material",
+      "doubleSided": true,
+      "alphaMode": "BLEND",
+      "pbrMetallicRoughness": {
+        "baseColorTexture": {
+          "index": 0
+        },
+        "baseColorFactor": [1.0, 1.0, 1.0, 1.0],
+        "metallicFactor": 0.0,
+        "roughnessFactor": 0.8
+      }
+    }
+  ],
+  "textures": [
+    {
+      "source": 0
+    }
+  ],
+  "images": [
+    {
+      "uri": "$imageFileName"
+    }
+  ],
+  "buffers": [
+    {
+      "uri": "data:application/octet-stream;base64,$bufferBase64",
+      "byteLength": 92
+    }
+  ],
+  "bufferViews": [
+    {
+      "buffer": 0,
+      "byteOffset": 0,
+      "byteLength": 48,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 48,
+      "byteLength": 32,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 80,
+      "byteLength": 12,
+      "target": 34963
+    }
+  ],
+  "accessors": [
+    {
+      "bufferView": 0,
+      "componentType": 5126,
+      "count": 4,
+      "type": "VEC3",
+      "min": [-1.0, -1.35, 0.0],
+      "max": [1.0, 1.35, 0.0]
+    },
+    {
+      "bufferView": 1,
+      "componentType": 5126,
+      "count": 4,
+      "type": "VEC2"
+    },
+    {
+      "bufferView": 2,
+      "componentType": 5123,
+      "count": 6,
+      "type": "SCALAR"
+    }
+  ]
+}
+''';
+  }
+
+  final Map<String, String> _arNodeToResourceType = {};
 
   void _handleRecognitionSuccess(int waypointId, Map<String, dynamic> availableResources, bool isOffline) async {
 
@@ -635,6 +1376,7 @@ class _ARCameraScreenState extends ConsumerState<ARCameraScreen>
     });
     _successAnimationController.reset();
     _successAnimationController.forward();
+
     _startAROverlayAnimation();
     // await _checkTourCompletion();
   }
@@ -643,23 +1385,23 @@ class _ARCameraScreenState extends ConsumerState<ARCameraScreen>
   MarkdownConfig _buildMarkdownConfig() {
     return MarkdownConfig(
       configs: [
-        const PConfig(
+        PConfig(
           textStyle: TextStyle(
-            fontSize: 16,
+            fontSize: context.r.sp(16),
             height: 1.5,
             color: AppColors.textSecondary,
           ),
         ),
         H1Config(
-          style: const TextStyle(
-            fontSize: 24,
+          style: TextStyle(
+            fontSize: context.r.sp(24),
             fontWeight: FontWeight.bold,
             color: AppColors.textPrimary,
           ),
         ),
         H2Config(
-          style: const TextStyle(
-            fontSize: 20,
+          style: TextStyle(
+            fontSize: context.r.sp(20),
             fontWeight: FontWeight.bold,
             color: AppColors.textPrimary,
           ),
@@ -670,79 +1412,76 @@ class _ARCameraScreenState extends ConsumerState<ARCameraScreen>
             decoration: TextDecoration.underline,
           ),
         ),
+
         ImgConfig(
           builder: (url, attributes) {
-            print("Loading image from URL: $url");
-            // Gestisci immagini locali con protocollo file://
+            debugPrint("Loading image from URL: $url");
+
             if (url.startsWith('file://')) {
               String localPath;
-              try{
+              try {
                 localPath = Uri.parse(url).toFilePath();
-              } catch(e) {
+              } catch (e) {
                 localPath = url.substring(7);
               }
+
               return Container(
                 margin: const EdgeInsets.symmetric(vertical: 8),
-                child: Image.file(
-                  File(localPath),
-                  fit: BoxFit.contain,
-                  errorBuilder: (context, error, stackTrace) {
-                    print("Error loading local image: $error");
-                    return Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        border: Border.all(color: Colors.grey),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Column(
-                        children: [
-                          const Icon(
-                            Icons.broken_image,
-                            size: 48,
-                            color: Colors.grey,
-                          ),
-                          const SizedBox(height: 8),
-                          Text('Image not found: ${localPath.split('/').last}'),
-                        ],
-                      ),
-                    );
-                  },
-                ),
-              );
-            } else {
-              // Immagini remote (modalità online)
-              return Container(
-                margin: const EdgeInsets.symmetric(vertical: 8),
-                child: Image.network(
-                  url,
-                  fit: BoxFit.contain,
-                  loadingBuilder: (context, child, loadingProgress) {
-                    if (loadingProgress == null) return child;
-                    return const Center(child: CircularProgressIndicator());
-                  },
-                  errorBuilder: (context, error, stackTrace) {
-                    return Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        border: Border.all(color: Colors.grey),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: const Column(
-                        children: [
-                          Icon(
-                            Icons.broken_image,
-                            size: 48,
-                            color: Colors.grey,
-                          ),
-                          SizedBox(height: 8),
-                          Text('Failed to load image'),
-                        ],
-                      ),
-                    );
-                  },
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: ZlibImage(
+                    filePath: localPath,
+                    fit: BoxFit.cover,
+                    useCache: false,
+                    errorBuilder: (context, error, stackTrace) {
+                      return Container(
+                        height: 180,
+                        width: double.infinity,
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade300,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Icon(
+                          Icons.image_not_supported,
+                          color: Colors.grey.shade600,
+                        ),
+                      );
+                    },
+                  ),
                 ),
               );
             }
+
+            return Container(
+              margin: const EdgeInsets.symmetric(vertical: 8),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: CachedNetworkImage(
+                  imageUrl: url,
+                  fit: BoxFit.cover,
+                  memCacheWidth: 1200,
+                  maxWidthDiskCache: 1600,
+                  placeholder:
+                      (context, url) => const Center(
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                  errorWidget: (context, url, error) {
+                    return Container(
+                      height: 180,
+                      width: double.infinity,
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade300,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Icon(
+                        Icons.image_not_supported,
+                        color: Colors.grey.shade600,
+                      ),
+                    );
+                  },
+                ),
+              ),
+            );
           },
         ),
         BlockquoteConfig(
@@ -771,7 +1510,9 @@ class _ARCameraScreenState extends ConsumerState<ARCameraScreen>
           setState(() {
             _waypoints = [];
             for (var waypoint in waypoints) {
-              _waypoints.add(waypoint);
+              if (!waypoint.isPreliminaryInfo) {
+                _waypoints.add(waypoint);
+              }
               if (waypoint.subWaypoints != null){
                 _waypoints.addAll(waypoint.subWaypoints!);
               }
@@ -785,7 +1526,7 @@ class _ARCameraScreenState extends ConsumerState<ARCameraScreen>
             _isLoadingWaypoints = false;
           });
         }
-        _showError('Failed to load waypoints: $e');
+        _showError('error_loading_waypoints'.tr());
       }
     } else {
       try {
@@ -795,6 +1536,8 @@ class _ARCameraScreenState extends ConsumerState<ARCameraScreen>
           final List subTours = (offlineData['sub_tours'] as List?) ?? [];
 
           final List<Waypoint> mainWaypoints = wps.map<Waypoint>((wp) => Waypoint.fromJson(wp as Map<String, dynamic>)).toList();
+          mainWaypoints.sort(Waypoint.compareByPosition);
+
           final List<Waypoint> subTourWaypoints = <Waypoint>[];
 
           for (final st in subTours) {
@@ -803,11 +1546,12 @@ class _ARCameraScreenState extends ConsumerState<ARCameraScreen>
 
             final subWpJson = (st['waypoints'] as List?) ?? [];
             final subWps = subWpJson.map<Waypoint>((wp) => Waypoint.fromJson(wp as Map<String, dynamic>)).toList();
+            subWps.sort(Waypoint.compareByPosition);
 
             subTourWaypoints.addAll(subWps);
           }
 
-          print("Loading images and resources for offline waypoints...");
+          debugPrint("Loading images and resources for offline waypoints...");
 
           final Map<int, List<String>> imagesByWp = {};
           final Map<int, Map<String, dynamic>> resourcesByWp = {};
@@ -835,7 +1579,8 @@ class _ARCameraScreenState extends ConsumerState<ARCameraScreen>
 
           if (mounted) {
             setState(() {
-              _waypoints = [...mainWaypoints, ...subTourWaypoints];
+              _waypoints = [...mainWaypoints, ...subTourWaypoints]
+                ..sort(Waypoint.compareByPosition);
               _offlineImagesByWaypoint = imagesByWp;
               _offlineResourcesByWaypoint = resourcesByWp;
               _isLoadingWaypoints = false;
@@ -848,8 +1593,8 @@ class _ARCameraScreenState extends ConsumerState<ARCameraScreen>
             _isLoadingWaypoints = false;
           });
         }
-        print("Failed to load offline waypoints: $e");
-        _showError('Failed to load offline waypoints: $e');
+        debugPrint("Failed to load offline waypoints: $e");
+        _showError('error_loading_waypoints'.tr());
 
       }
     }
@@ -857,8 +1602,9 @@ class _ARCameraScreenState extends ConsumerState<ARCameraScreen>
 
   // Set the initial content for the draggable sheet
   void _setInitialContent() {
+    _getTourWaypoints();
+
     setState(() {
-      _getTourWaypoints();
       _currentMarkdownContent = """ 
       """;
       _currentActiveContent = MarkdownWidget(
@@ -873,21 +1619,16 @@ class _ARCameraScreenState extends ConsumerState<ARCameraScreen>
   String _processImageContent(String content) {
     if (content.isEmpty) return content;
 
-    // Definisci il prefisso che vuoi aggiungere (ad esempio il base URL del tuo server)
     String baseUrl = _apiService.getCurrentBaseUrl();
 
-    // Split il contenuto in righe
     List<String> lines = content.split('\n');
 
-    // Processa ogni riga
     List<String> processedLines =
         lines.map((line) {
           line = line.trim();
 
-          // Controlla se la riga contiene un'immagine markdown
           if (line.startsWith('![') &&
               line.contains('](/stream_minio_resource/')) {
-            // Estrai il numero dell'immagine e il percorso
             RegExp regex = RegExp(
               r'!\[(\d+)\]\((/stream_minio_resource/[^)]+)\)',
             );
@@ -897,7 +1638,6 @@ class _ARCameraScreenState extends ConsumerState<ARCameraScreen>
               String imageNumber = match.group(1)!;
               String imagePath = match.group(2)!;
 
-              // Ricostruisci la riga con il prefisso
               return '![$imageNumber]($baseUrl$imagePath)';
             }
           }
@@ -915,6 +1655,8 @@ class _ARCameraScreenState extends ConsumerState<ARCameraScreen>
     Widget? contentToDisplay;
     Map<String, dynamic> content = {};
 
+    unawaited(_analytics.logEvent(name: "content_viewed", parameters: {"tour_id": widget.tourId, "waypoint_id": waypointId, "content_type": type, "is_offline": widget.isOffline}));
+
     var queryType = type;
     if (type == "text"){
       queryType = "readme";
@@ -931,11 +1673,6 @@ class _ARCameraScreenState extends ConsumerState<ARCameraScreen>
 
     try {
       if (widget.isOffline) {
-        // if(_offlineResourcesByWaypoint.containsKey(waypointId)) {
-        //   content = _offlineResourcesByWaypoint[waypointId]!;
-        // } else {
-        //   throw Exception("No offline resources found for waypoint $waypointId");
-        // }
         final resources = _offlineResourcesByWaypoint[waypointId] ?? {};
         final images = _offlineImagesByWaypoint[waypointId] ?? [];
 
@@ -950,18 +1687,19 @@ class _ARCameraScreenState extends ConsumerState<ARCameraScreen>
         };
 
       } else {
-        final response = await _tourService.getResourceByWaypointAndType(
-          waypointId,
-          queryType,
-        );
-        content = response as Map<String, dynamic>;
+        // final response = await _tourService.getResourceByWaypointAndType(
+        //   waypointId,
+        //   queryType,
+        // );
+        // content = response as Map<String, dynamic>;
+        content = await _getResourceWithMetaCache(waypointId, queryType);
         if(content.containsKey("url")){
           content[queryType] = content["url"];
         }
-        print("Retrieved content for waypoint $waypointId, type $queryType: $content");
+        debugPrint("Retrieved content for waypoint $waypointId, type $queryType: $content");
       }
     } catch (e) {
-      print("error retrieving content: $e");
+      debugPrint("error retrieving content: $e");
       type = 'error';
     }
 
@@ -990,7 +1728,7 @@ class _ARCameraScreenState extends ConsumerState<ARCameraScreen>
     switch (type) {
       case 'text':
         final readmePath = content['readme'] ?? '';
-        print("Readme path: $readmePath");
+        debugPrint("Readme path: $readmePath");
         if (readmePath.isNotEmpty) {
           File? textFile = await _loadAndDecompressResource(
             readmePath,
@@ -1034,21 +1772,21 @@ class _ARCameraScreenState extends ConsumerState<ARCameraScreen>
                     linksList = decoded.map((e) => e.toString()).toList();
                   }
                 } catch (e) {
-                  print("Error decoding links JSON: $e");
+                  debugPrint("Error decoding links JSON: $e");
                   if (fileContent.isNotEmpty) {
                     linksList = fileContent.split('\n').where((line) => line.trim().isNotEmpty).toList();
                   }
                 }
               } 
               } catch (e) {
-                print("Error reading links file: $e");
+                debugPrint("Error reading links file: $e");
               }
             }
           } else {
             linksList = (content['links'] as List?)?.cast<String>() ?? [];
           }
 
-        print("Links list: $linksList");
+        debugPrint("Links list: $linksList");
 
         if(linksList.isNotEmpty) {
           StringBuffer mdBuffer = StringBuffer("# ${widget.landmarkName} Links\n\n");
@@ -1074,27 +1812,23 @@ class _ARCameraScreenState extends ConsumerState<ARCameraScreen>
 
       case 'image':
         final imagesList = (content['images'] as List?)?.cast<String>() ?? [];
-        print("Images list: $imagesList");
+        debugPrint("Images list: $imagesList");
 
         if (imagesList.isNotEmpty) {
           StringBuffer mdBuffer = StringBuffer("# ${widget.landmarkName}\n\n");
 
-          for (String imgPath in imagesList) {
-            File? imageFile = await _loadAndDecompressResource(
-              imgPath,
-              widget.isOffline,
-              'jpg',
-            );
+          for (final imgPath in imagesList) {
+            final markdownImageUrl = widget.isOffline
+                ? Uri.file(imgPath).toString()
+                : imgPath.startsWith("http")
+                    ? imgPath
+                    : "${_apiService.getCurrentBaseUrl()}$imgPath";
 
-            if (imageFile != null) {
-              final fileUri = Uri.file(imageFile.path).toString();
-              print("Image file URI: $fileUri");
-              mdBuffer.writeln("![Image]($fileUri)\n\n");
-            }
-
-            _currentMarkdownContent = mdBuffer.toString();
-
+            mdBuffer.writeln("![Image]($markdownImageUrl)\n\n");
           }
+
+          _currentMarkdownContent = mdBuffer.toString();
+
         } else {
           _currentMarkdownContent = "# ${widget.landmarkName}\n\nNo images available for this waypoint.";
         }
@@ -1106,68 +1840,75 @@ class _ARCameraScreenState extends ConsumerState<ARCameraScreen>
           shrinkWrap: true,
         );
         break;
-
       case 'video':
-        final videoPath = content['video'] ?? '';
-        print("Video path: $videoPath");
+        final videoPath = (content['video'] ?? content['url'] ?? '').toString();
         if (videoPath.isNotEmpty) {
-          File? videoFile = await _loadAndDecompressResource(
+          if (widget.isOffline) {
+            final videoFile = await _loadAndDecompressResource(
               videoPath,
-              widget.isOffline,
+              true,
               'mp4',
-          );
-
-          if (videoFile != null) {
-            contentToDisplay = VideoPlayerWidget(
-              videoUrl: videoFile.path,
-              isLocalFile: true, //Sempre true perché è un file locale temporaneo
             );
+            contentToDisplay =
+                (videoFile != null)
+                    ? VideoPlayerWidget(
+                      videoUrl: videoFile.path,
+                      isLocalFile: true,
+                    )
+                    : const Center(
+                      child: Text("Errore nel caricamento del video"),
+                    );
           } else {
-            contentToDisplay = const Center(child: Text("Errore nel caricamento del video"));
+            final videoUrl =
+                videoPath.startsWith('http')
+                    ? videoPath
+                    : "${_apiService.getCurrentBaseUrl()}$videoPath";
+            contentToDisplay = VideoPlayerWidget(
+              videoUrl: videoUrl,
+              isLocalFile: false,
+            );
           }
-
         } else {
           contentToDisplay = const Center(
-            child: Text(
-              'No video available for this waypoint.',
-              style: TextStyle(color: AppColors.textPrimary),
-            ),
+            child: Text('No video available for this waypoint.'),
           );
         }
         break;
-
       case 'document':
-        final pdfPath = content['pdf'] ?? '';
-        print("PDF path: $pdfPath");
+        final pdfPath = (content['pdf'] ?? content['url'] ?? '').toString();
         if (pdfPath.isNotEmpty) {
-          File? pdfFile = await _loadAndDecompressResource(
-            pdfPath,
-            widget.isOffline,
-            'pdf',
-          );
-
-          if (pdfFile != null) {
-            contentToDisplay = PdfViewerWidget(
-              pdfUrl: pdfFile.path,
-              isLocalFile: true, //Sempre true perché è un file locale temporaneo
+          if (widget.isOffline) {
+            final pdfFile = await _loadAndDecompressResource(
+              pdfPath,
+              true,
+              'pdf',
             );
+            contentToDisplay =
+                (pdfFile != null)
+                    ? PdfViewerWidget(pdfUrl: pdfFile.path, isLocalFile: true)
+                    : const Center(
+                      child: Text("Errore nel caricamento del PDF"),
+                    );
           } else {
-            contentToDisplay = const Center(child: Text("Errore nel caricamento del PDF"));
+            final pdfUrl =
+                pdfPath.startsWith('http')
+                    ? pdfPath
+                    : "${_apiService.getCurrentBaseUrl()}$pdfPath";
+            contentToDisplay = PdfViewerWidget(
+              pdfUrl: pdfUrl,
+              isLocalFile: false,
+            );
           }
-
         } else {
           contentToDisplay = const Center(
-            child: Text(
-              'No PDF document available for this waypoint.',
-              style: TextStyle(color: AppColors.textPrimary),
-            ),
+            child: Text('No PDF document available for this waypoint.'),
           );
         }
         break;
 
       case 'audio':
         final audioPath = content['audio'] ?? '';
-        print("Audio path: $audioPath");
+        debugPrint("Audio path: $audioPath");
         if (audioPath.isNotEmpty) {
           File? audioFile = await _loadAndDecompressResource(
             audioPath,
@@ -1203,14 +1944,33 @@ class _ARCameraScreenState extends ConsumerState<ARCameraScreen>
         );
     }
 
-    // _sheetController.animateTo(
-    //   _initialSheetSize + 0.25,
-    //   duration: const Duration(milliseconds: 300),
-    //   curve: Curves.easeInOut,
-    // );
+    _sheetController.animateTo(
+      _initialSheetSize + 0.25,
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeInOut,
+    );
+
     if (mounted && contentToDisplay != null){
+      // setState(() {
+      //   _currentActiveContent = contentToDisplay;
+      // });
       setState(() {
-        _currentActiveContent = contentToDisplay;
+        _currentActiveContent = Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            TextButton.icon(
+              onPressed: () {
+                setState(() {
+                  _currentActiveContent = _buildResourceButtonsContent();
+                });
+              },
+              icon: const Icon(Icons.arrow_back),
+              label: const Text('Risorse'),
+            ),
+            const SizedBox(height: 8),
+            contentToDisplay!,
+          ],
+        );
       });
     }
   }
@@ -1275,7 +2035,7 @@ class _ARCameraScreenState extends ConsumerState<ARCameraScreen>
         }
       }
     } catch (e) {
-      print('Error getting location: $e');
+      debugPrint('Error getting location: $e');
     }
   }
 
@@ -1291,26 +2051,29 @@ class _ARCameraScreenState extends ConsumerState<ARCameraScreen>
     // Start pulse animation
     _pulseAnimationController.repeat(reverse: true);
 
-    // // --- TEST CODE: BYPASS INFERENCE ---
-    // // Simula un ritardo di scansione
-    // await Future.delayed(const Duration(seconds: 2));
+    // await WidgetsBinding.instance.endOfFrame;
+    // await Future.delayed(const Duration(milliseconds: 50));
 
-    // // Usa il primo waypoint disponibile o un ID di default
-    // int waypointId = _waypoints.isNotEmpty ? _waypoints.first.id : 1;
+    // --- TEST CODE: BYPASS INFERENCE ---
+    // Simula un ritardo di scansione
+    await Future.delayed(const Duration(seconds: 2));
 
-    // // Simula la disponibilità di tutte le risorse
-    // Map<String, dynamic> availableResources = {
-    //   "readme": 1,
-    //   "links": 1,
-    //   "images": 1,
-    //   "video": 1,
-    //   "pdf": 1,
-    //   "audio": 1,
-    // };
+    // Usa il primo waypoint disponibile o un ID di default
+    int waypointId = _waypoints.isNotEmpty ? _waypoints.first.id : 1;
 
-    // _handleRecognitionSuccess(waypointId, availableResources, widget.isOffline);
-    // return;
-    // // -----------------------------------
+    // Simula la disponibilità di tutte le risorse
+    Map<String, dynamic> availableResources = {
+      "readme": 1,
+      "links": 1,
+      "images": 1,
+      "video": 1,
+      "pdf": 1,
+      "audio": 1,
+    };
+
+    _handleRecognitionSuccess(waypointId, availableResources, widget.isOffline);
+    return;
+    // -----------------------------------
 
     try {
       Uint8List? bytes;
@@ -1324,7 +2087,7 @@ class _ARCameraScreenState extends ConsumerState<ARCameraScreen>
       Map<String, dynamic> availableResources = {};
 
       if (widget.isOffline) {
-        print("OFFLINE RECOGNITION");
+        debugPrint("OFFLINE RECOGNITION");
         if(_offlineRecognitionService == null) {
           throw Exception("Offline Recognition Service not initialized");
         }
@@ -1335,7 +2098,17 @@ class _ARCameraScreenState extends ConsumerState<ARCameraScreen>
           'orientation': orientation,
         });
 
-        waypointId = await _offlineRecognitionService!.matchFromImageBytes(rotatedBytes, sensorOrientation: 0);
+        // waypointId = await _offlineRecognitionService!.matchFromImageBytes(rotatedBytes, sensorOrientation: 0);
+
+        waypointId = await _offlineRecognitionService!.matchFromImageBytes(
+          rotatedBytes,
+          sensorOrientation: 0,
+          useGeometry: false,
+          queryLat: _currentPosition?.latitude,
+          queryLon: _currentPosition?.longitude,
+          queryAccuracyM: _currentPosition?.accuracy,
+        );
+
         if (waypointId != -1) {
           availableResources = {
             "readme": 0,
@@ -1362,29 +2135,61 @@ class _ARCameraScreenState extends ConsumerState<ARCameraScreen>
           'bytes': bytes,
           'orientation': _cameraController!.description.sensorOrientation,
         });
-        final String base64Image = base64Encode(rotatedBytes);
-        final result = await _apiService.inference(base64Image, widget.tourId, baseUrl: _apiService.getCurrentBaseUrl());
+
+        final result = await _apiService.inference(
+          rotatedBytes,
+          widget.tourId,
+          _currentPosition?.latitude,
+          _currentPosition?.longitude,
+          _currentPosition?.accuracy,
+          baseUrl: _apiService.getCurrentBaseUrl(),
+        );
+
         waypointId = result.data["result"] ?? -1;
         availableResources = result.data["available_resources"] ?? {};
-        print("AVAILABLE RESOURCES: $availableResources");
+        debugPrint("AVAILABLE RESOURCES: $availableResources");
       }
 
       _pulseAnimationController.stop();
       
       final success = waypointId != -1;
       if (success) {
+
+        unawaited(_analytics.logEvent(name: 'recognition_success', parameters: {
+          'waypoint_id': waypointId,
+          'tour_id': widget.tourId,
+          'is_offline': widget.isOffline,
+        }));
+
         _handleRecognitionSuccess(waypointId, availableResources, widget.isOffline);
       } else {
-        setState(() => _recognitionState = RecognitionState.failure);
+        unawaited(_analytics.logEvent(name: 'recognition_failure', parameters: {
+          'tour_id': widget.tourId,
+          'is_offline': widget.isOffline,
+        }));
+
+        _showError(_getRandomRecognitionFailureMessage());
+        setState(() {
+          _recognitionFailureMessage = _getRandomRecognitionFailureMessage();
+          _recognitionState = RecognitionState.failure;
+        });        
         _failureAnimationController.forward();
         Timer(const Duration(seconds: 3), () {
           if (mounted) _resetRecognition();
         });
       }
     } catch(e) {
-      print("Error during recognition: $e");
-      _showError("Recognition failed: $e");
-      setState(() => _recognitionState = RecognitionState.failure);
+      debugPrint("Error during recognition: $e");
+      unawaited(_analytics.logEvent(name: 'recognition_error', parameters: {
+        'tour_id': widget.tourId,
+        'is_offline': widget.isOffline,
+        'error': e,
+      }));
+      _showError(_getRandomRecognitionFailureMessage());
+      setState(() {
+        _recognitionFailureMessage = _getRandomRecognitionFailureMessage();
+        _recognitionState = RecognitionState.failure;
+      });      
       _failureAnimationController.forward();
       Timer(const Duration(seconds: 3), () {
         if (mounted) _resetRecognition();
@@ -1397,7 +2202,7 @@ class _ARCameraScreenState extends ConsumerState<ARCameraScreen>
     try {
       // Ottieni tutti gli ID dei waypoint del tour corrente
       List<int> allWaypointIds =
-          _waypoints.map((waypoint) => waypoint.id).toList();
+          _waypoints.where((waypoint) => !waypoint.isPreliminaryInfo).map((waypoint) => waypoint.id).toList();
 
       // Aggiungi anche gli ID dei sub-waypoint se presenti
       for (var waypoint in _waypoints) {
@@ -1406,7 +2211,7 @@ class _ARCameraScreenState extends ConsumerState<ARCameraScreen>
         }
       }
 
-      print("All waypoint IDs: $allWaypointIds");
+      debugPrint("All waypoint IDs: $allWaypointIds");
 
       // Verifica se il tour è completato
       final isCompleted = await _localStateService.checkTourCompletion(
@@ -1418,7 +2223,7 @@ class _ARCameraScreenState extends ConsumerState<ARCameraScreen>
         _showTourCompletedDialog();
       }
     } catch (e) {
-      print('Error checking tour completion: $e');
+      debugPrint('Error checking tour completion: $e');
     }
   }
 
@@ -1488,6 +2293,12 @@ class _ARCameraScreenState extends ConsumerState<ARCameraScreen>
     _totemSpawned = false;
     _totemBaseNode = null;
     _totemBodyNode = null;
+    _markdownScrollTimer?.cancel();
+    _markdownScrollTimer = null;
+    _totemMarkdownCardNode = null;
+    _arNodeToResourceType.clear();
+    _markdownMaxScrollOffset = 0.0;
+    _markdownScrollFrame = 0;
     }
 
 
@@ -1511,6 +2322,7 @@ class _ARCameraScreenState extends ConsumerState<ARCameraScreen>
 
     setState(() {
       _recognitionState = RecognitionState.ready;
+      _recognitionFailureMessage = "";
     });
 
     _successAnimationController.reset();
@@ -1527,6 +2339,66 @@ class _ARCameraScreenState extends ConsumerState<ARCameraScreen>
   // Navigate back to previous screen
   void _navigateBack(BuildContext context) {
     Navigator.of(context).pop();
+  }
+
+  Widget _buildResourceButtonsContent() {
+    final List<Map<String, dynamic>> resources =
+        _getAvailableIconsData()
+            .where((e) => e['isVisible'] == true)
+            .map((e) => Map<String, dynamic>.from(e))
+            .toList();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          widget.landmarkName,
+          style: const TextStyle(
+            fontSize: 22,
+            fontWeight: FontWeight.bold,
+            color: AppColors.textPrimary,
+          ),
+        ),
+        const SizedBox(height: 8),
+        const Text(
+          'Risorse disponibili',
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w600,
+            color: AppColors.textPrimary,
+          ),
+        ),
+        const SizedBox(height: 16),
+
+        if (resources.isEmpty)
+          const Text(
+            'Nessuna risorsa disponibile per questo waypoint.',
+            style: TextStyle(color: AppColors.textSecondary),
+          )
+        else
+          Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            children: [
+              for (final resource in resources)
+                ElevatedButton.icon(
+                  onPressed: () {
+                    _updateDraggableSheetContent(
+                      resource['type'] as String,
+                      _recognizedWaypointId,
+                    );
+                  },
+                  icon: Image.asset(
+                    resource['assetPath'] as String,
+                    width: 20,
+                    height: 20,
+                  ),
+                  label: Text(resource['label'] as String),
+                ),
+            ],
+          ),
+      ],
+    );
   }
 
   List<Map<String, dynamic>> _getAvailableIconsData() {
@@ -1553,7 +2425,7 @@ class _ARCameraScreenState extends ConsumerState<ARCameraScreen>
         'assetPath': 'assets/icons/image.png',
         'modelPath': 'assets/models/AR/buttons/image/b4.gltf', // Modello 3D
         'angle': pi / 4.5, // Posizione 2D (Basso-Destra)
-        'isVisible': true, // Sempre visibile
+        'isVisible': _availableResources["images"] > 0, // Sempre visibile
       },
       {
         'type': 'video',
@@ -1598,7 +2470,11 @@ class _ARCameraScreenState extends ConsumerState<ARCameraScreen>
     return SizedBox(
       width: double.infinity,
       height: double.infinity,
-      child: CameraPreview(_cameraController!),
+      child: GestureDetector(
+        onScaleStart: _handleScaleStart,
+        onScaleUpdate: _handleScaleUpdate,
+        child: CameraPreview(_cameraController!)
+      ),
     );
   }
 
@@ -1704,10 +2580,10 @@ class _ARCameraScreenState extends ConsumerState<ARCameraScreen>
       return const SizedBox.shrink();
     }
 
+    final responsive = context.r;
     // Configuration for AR overlay elements
-    final double arIconRadius =
-        screenWidth * 0.28; // Radius for the AR icons circle
-    final double iconSize = 70.0; // Size of the _buildSimpleAROverlay widget
+    final double arIconRadius = responsive.consultationIconRadius(); // Radius for the AR icons circle
+    final double iconSize = responsive.consultationIconSize(); // Size of the _buildSimpleAROverlay widget
 
     final iconsData = _getAvailableIconsData();
 
@@ -1788,7 +2664,7 @@ class _ARCameraScreenState extends ConsumerState<ARCameraScreen>
               assetPath: elementData['assetPath'],
               iconSize: iconSize, // Use the same size for all icons
               onTap: () {
-                print('${elementData['label']} Info icon tapped!'); 
+                debugPrint('${elementData['label']} Info icon tapped!'); 
                 _updateDraggableSheetContent(elementData['type'], _recognizedWaypointId);
               
               }
@@ -1799,20 +2675,20 @@ class _ARCameraScreenState extends ConsumerState<ARCameraScreen>
         Builder(
           builder: (context) {
             final double closeAngle = -2 * pi / 1.01;
-            final double closeX = centerX + (arIconRadius * 1.15) * cos(closeAngle); 
-            final double closeY = centerY + (arIconRadius * 1.15) * sin(closeAngle);
+            final double closeX = centerX + (arIconRadius) * cos(closeAngle); 
+            final double closeY = centerY + (arIconRadius) * sin(closeAngle);
 
             return Positioned(
-              left: closeX - (50.0 / 2),
-              top: closeY - (50.0 / 2),
+              left: closeX - (iconSize / 2),
+              top: closeY - (iconSize / 2),
               child: _buildSimpleAROverlay(
                 label: "Close",
                 delay: 0.2,
                 isVisible: true,
                 assetPath: "assets/icons/back_icon.png",
-                iconSize: 50.0,
+                iconSize: iconSize,
                 onTap: () {
-                  print("Close icon Tapped!");
+                  debugPrint("Close icon Tapped!");
                   _resetRecognition();
                 },
               ),
@@ -1838,7 +2714,7 @@ class _ARCameraScreenState extends ConsumerState<ARCameraScreen>
 
     if (label == 'Close') {
       // Special case for the close icon
-      iconSize = 50.0;
+      iconSize = iconSize - 15.0;
       }
 
     // Animation logic based on _arOverlayProgress (from your state) and individual delay
@@ -1862,7 +2738,7 @@ class _ARCameraScreenState extends ConsumerState<ARCameraScreen>
             fit: BoxFit.contain, // Adjust BoxFit as needed
             // Optional: Add an error builder in case the asset fails to load
             errorBuilder: (context, error, stackTrace) {
-              print('Error loading asset: $assetPath, $error');
+              debugPrint('Error loading asset: $assetPath, $error');
               return Icon(
                 Icons.broken_image, // Placeholder for broken image
                 size: iconSize,
@@ -1937,12 +2813,14 @@ class _ARCameraScreenState extends ConsumerState<ARCameraScreen>
     final screenHeight = MediaQuery.of(context).size.height;
     final screenWidth = MediaQuery.of(context).size.width;
 
+    final buttonSize = context.r.roundButtonSize();
+
     return Positioned(
-      top: MediaQuery.of(context).padding.top + 25,
+      top: MediaQuery.of(context).padding.top + context.r.space(25),
       left: 15,
       child: Container(
-        width: screenWidth * 0.15,
-        height: screenHeight * 0.07,
+        width: buttonSize,
+        height: buttonSize,
         decoration: BoxDecoration(
           color: AppColors.background.withOpacity(0.9),
           shape: BoxShape.circle,
@@ -1973,7 +2851,7 @@ Widget _buildMiniMap(BuildContext context) {
     final mapSize = screenWidth * 0.35;
 
     return Positioned(
-      top: MediaQuery.of(context).padding.top + 16,
+      top: MediaQuery.of(context).padding.top + context.r.space(25),
       right: 16,
       child: Container(
         width: mapSize,
@@ -2094,7 +2972,7 @@ Widget _buildMiniMap(BuildContext context) {
         _baseMapLayer(),
         // TileLayer(
         //   urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-        //   userAgentPackageName: 'com.isislab.xrtourguide',
+        //   userAgentPackageName: 'com.picaresque.xrtourguide',
         // ),
 
         // Current location marker (se disponibile)
@@ -2149,10 +3027,10 @@ Widget _buildMiniMap(BuildContext context) {
                       child: Center(
                         child: Text(
                           '${index + 1}',
-                          style: const TextStyle(
+                          style: TextStyle(
                             color: Colors.white,
                             fontWeight: FontWeight.bold,
-                            fontSize: 10,
+                            fontSize: context.r.sp(10),
                           ),
                         ),
                       ),
@@ -2163,6 +3041,7 @@ Widget _buildMiniMap(BuildContext context) {
       ],
     );
   }
+
   // Build the draggable bottom sheet with landmark information
   Widget _buildDraggableSheet(BuildContext context) {
     return DraggableScrollableSheet(
@@ -2230,8 +3109,7 @@ Widget _buildMiniMap(BuildContext context) {
   Widget build(BuildContext context) {
     // Define the size for the static semi-transparent circle
     // It should be large enough to encompass the largest state of the central button (e.g., ready state button size 80)
-    final double staticOuterCircleSize =
-        250.0; // Example size, adjust as needed
+    final double staticOuterCircleSize = context.r.consultationOuterCircleSize(); // Example size, adjust as needed
 
     final screenWidth = MediaQuery.of(context).size.width;
     final mapSize = screenWidth * 0.35;
@@ -2239,7 +3117,7 @@ Widget _buildMiniMap(BuildContext context) {
 
 
     return Scaffold(
-      backgroundColor: Colors.black, // Black background for camera feel
+      backgroundColor: widget.enableRecognition ? Colors.black : Colors.white, // Black background for camera feel
       extendBodyBehindAppBar: true,
       body: Stack(
         children: [
@@ -2247,10 +3125,12 @@ Widget _buildMiniMap(BuildContext context) {
           if (_isARMode) 
             ARView(
               onARViewCreated: onARViewCreated,
-              planeDetectionConfig: PlaneDetectionConfig.horizontalAndVertical,
+              planeDetectionConfig: PlaneDetectionConfig.horizontal,
               )
-          else 
-            _buildCameraBackground(),
+          else if (widget.enableRecognition)
+            _buildCameraBackground()
+          else
+            Container(color: Colors.white, width: double.infinity, height: double.infinity),
 
           // --- Static Semi-transparent Circle (added here) ---
           if (!_isARMode)
@@ -2278,14 +3158,14 @@ Widget _buildMiniMap(BuildContext context) {
           _buildBackButton(context),
 
           // Mini map (top right)
-          _buildMiniMap(context),
+          if(widget.enableRecognition) _buildMiniMap(context),
 
           // Draggable bottom sheet with landmark info
           _buildDraggableSheet(context),
 
-          if (_recognitionState == RecognitionState.success)
+          if (_recognitionState == RecognitionState.success && widget.enableRecognition)
             Positioned(
-              top: MediaQuery.of(context).padding.top + 16 + miniMapHeight + 10,
+              top: MediaQuery.of(context).padding.top + context.r.space(16) + miniMapHeight + context.r.space(10),
               right: 16,
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
@@ -2327,10 +3207,10 @@ Widget _buildMiniMap(BuildContext context) {
                   color: Colors.black87,
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: const Text(
+                child: Text(
                   "Punto Riconosciuto! \n Tocca il pavimento per posizionare il Totem",
                   textAlign: TextAlign.center,
-                  style: TextStyle(color: Colors.white, fontSize: 16),
+                  style: TextStyle(color: Colors.white, fontSize: context.r.sp(16)),
                 )
               )
             )

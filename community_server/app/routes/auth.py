@@ -18,6 +18,35 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 TEMPLATES_DIR = os.path.join(BASE_DIR, "templates")
 templates = Jinja2Templates(directory=TEMPLATES_DIR)
 
+VERIFICATION_TOKEN_TTL_HOURS = 24
+VERIFICATION_RESEND_COOLDOWN_SECONDS = 90
+
+def _new_verification_expiry(now: Optional[datetime] = None) -> datetime:
+    current = now or datetime.utcnow()
+    return current + timedelta(hours=VERIFICATION_TOKEN_TTL_HOURS)
+
+def _verification_is_pending(user: models.User, now: Optional[datetime] = None) -> bool:
+    current = now or datetime.utcnow()
+    return bool(
+        user.email_verification_token and 
+        user.email_verification_expires and 
+        user.email_verification_expires > current
+    )
+    
+def _seconds_until_resent_allowed(user: models.User, now: Optional[datetime] = None) -> int:
+    if not user.email_verification_expires:
+        return 0
+    
+    current = now or datetime.utcnow()
+    last_sent_at = user.email_verification_expires - timedelta(hours=VERIFICATION_TOKEN_TTL_HOURS)
+    next_allowed_at = last_sent_at + timedelta(seconds=VERIFICATION_RESEND_COOLDOWN_SECONDS)
+    remaining = (next_allowed_at - current).total_seconds()
+    
+    if remaining <= 0:
+        return 0
+    
+    return int(remaining) + (0 if remaining.is_integer() else 1)
+
 def get_db():
     db = SessionLocal()
     try:
@@ -36,7 +65,74 @@ class UserRegister(BaseModel):
 
 class GoogleLoginRequest(BaseModel):
     id_token: str
+    
+class AppleLoginRequest(BaseModel):
+    identity_token: str
+    authorization_code: Optional[str] = None
+    given_name: Optional[str] = None
+    family_name: Optional[str] = None
+    email: Optional[EmailStr] = None
+    
+def _generate_unique_username(db: Session, email: str) -> str:
+    base_username = email.split("@")[0]
+    username = base_username
+    counter = 1
+    while db.query(models.User).filter(models.User.username == username).first():
+        username = f"{base_username}{counter}"
+        counter += 1
+    return username
 
+def verify_apple_identity_token(identity_token: str) -> dict:
+    import requests
+    from jose import jwt
+    from jose.exceptions import JWTError
+    
+    APPLE_ISSUER = "https://appleid.apple.com"
+    APPLE_KEYS_URL = "https://appleid.apple.com/auth/keys"
+    
+    allowed_client_ids = [
+        value.strip() for value in os.getenv("APPLE_CLIENT_IDS", "").split(",") if value.strip()
+    ]
+    
+    if not allowed_client_ids:
+        raise HTTPException(status_code=500, detail="Apple OAuth not configured properly")
+    
+    try:
+        unverified_header = jwt.get_unverified_header(identity_token)
+        kid = unverified_header.get("kid")
+        
+        keys_response = requests.get(APPLE_KEYS_URL, timeout=10)
+        keys_response.raise_for_status()
+        apple_keys = keys_response.json().get("keys", [])
+        
+        key = next((item for item in apple_keys if item.get("kid") == kid), None)
+        
+        if not key:
+            raise HTTPException(status_code=401, detail="Invalid Apple token: key not found")
+        
+        last_error = None
+        
+        for audience in allowed_client_ids:
+            try:
+                return jwt.decode(
+                    identity_token,
+                    key,
+                    algorithms=[key.get("alg", "RS256")],
+                    audience = audience,
+                    issuer = APPLE_ISSUER
+                )
+            except JWTError as e:
+                last_error = e
+        
+        raise HTTPException(status_code=401, detail=f"Invalid Apple token: {str(last_error)}")
+    
+    except HTTPException as he:
+        print(f"Apple verify_identity HTTP error: {he.status_code} - {he.detail}", flush=True)
+        raise
+    except Exception as e:
+        print(f"Apple verify_identity error: {e.status_code} - {e.detail}", flush=True)
+        raise HTTPException(status_code=401, detail=f"Apple token verification failed: {str(e)}")
+    
 @router.get("/", response_class=HTMLResponse)
 async def root(request: Request, db: Session = Depends(get_db)):
     services = db.query(models.Services).all()
@@ -197,6 +293,8 @@ async def refresh(request: Request, db: Session = Depends(get_db), service: Serv
         500: {"description": "Google OAuth not configured or authentication error"}
     }
 )
+
+
 async def google_login(
     data: GoogleLoginRequest,
     db: Session = Depends(get_db), 
@@ -207,6 +305,8 @@ async def google_login(
         from google.auth.transport import requests as google_requests
         
         GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
+        GOOGLE_ID_TOKEN_CLOCK_SKEW_SECONDS = int(os.getenv("GOOGLE_ID_TOKEN_CLOCK_SKEW_SECONDS", "60"))
+
 
         if not GOOGLE_CLIENT_ID:
             raise HTTPException(status_code=500, detail="Google OAuth not configured")
@@ -214,7 +314,8 @@ async def google_login(
         idinfo = id_token.verify_oauth2_token(
             data.id_token,
             google_requests.Request(),
-            GOOGLE_CLIENT_ID
+            GOOGLE_CLIENT_ID,
+            clock_skew_in_seconds=GOOGLE_ID_TOKEN_CLOCK_SKEW_SECONDS
         )
 
         if idinfo["iss"] not in ["accounts.google.com", "https://accounts.google.com"]:
@@ -288,8 +389,119 @@ async def google_login(
 
     except ValueError as e:
         raise HTTPException(status_code=401, detail=f"Invalid Google token: {str(e)}")
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Authentication error: {str(e)}")
+
+@router.post(
+    "/api/apple-login/",
+    summary="Login or register using Apple OAuth",
+    responses={
+        200: {"description": "Apple login successful"},
+        400: {"description": "Email not provided by Apple"},
+        401: {"description": "Invalid token issuer or account is deactivated"},
+        500: {"description": "Apple OAuth not configured or authentication error"}
+    },
+)
+async def apple_login(
+    data: AppleLoginRequest,
+    db: Session = Depends(get_db),
+    service: Services = Depends(verify_service_or_mobile)
+):
+    try:
+        payload = verify_apple_identity_token(data.identity_token)
+        
+        apple_id = payload.get("sub")
+        token_email = payload.get("email")
+        email = data.email or token_email
+        
+        given_name = data.given_name or ""
+        family_name = data.family_name or ""
+        
+        if not apple_id:
+            raise HTTPException(status_code=401, detail="Invalid Apple token: subject (sub) claim missing")
+        
+        user = db.query(models.User).filter(models.User.apple_id == apple_id).first()
+        
+        if not user and email:
+            user = db.query(models.User).filter(models.User.email == email).first()
+            
+        if not user:
+            if not email:
+                raise HTTPException(status_code=400, detail="Email not provided by Apple")
+            
+            username = _generate_unique_username(db, email)
+            
+            user = models.User(
+                username=username,
+                email=email,
+                name=given_name,
+                surname=family_name,
+                active=True,
+                email_verified=True,
+                apple_id=apple_id,
+                role=models.UserRole.USER
+            )
+            
+            user.set_password(secrets.token_urlsafe(32))
+            db.add(user)
+            db.commit()
+            db.refresh(user)
+        else:
+            if not user.apple_id:
+                user.apple_id = apple_id
+                
+            if not user.email_verified:
+                user.email_verified = True
+                
+            if not user.active:
+                raise HTTPException(status_code=401, detail="Account is deactivated")
+            
+            if given_name and not user.name:
+                user.name = given_name
+                
+            if family_name and not user.surname:
+                user.surname = family_name
+                
+            db.commit()
+            db.refresh(user)
+            
+        access_token = create_access_token({
+            "user_id": user.id,
+            "username": user.username,
+            "email": user.email
+        })
+        
+        refresh_token = create_refresh_token({
+            "user_id": user.id,
+            "username": user.username
+        })
+        
+        return {
+            "access": access_token,
+            "refresh": refresh_token,
+            "token_type": "bearer",
+            "user": {
+                "id": user.id,
+                "username": user.username,
+                "email": user.email,
+                "name": user.name,
+                "surname": user.surname,
+                "city": user.city,
+                "description": user.description
+            }
+        }
+        
+    except HTTPException as he:
+        print(f"Apple login HTTP error: {he.status_code} - {he.detail}", flush=True)
+        raise
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        print(f"Apple login error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Authentication error: {str(e)}")
+
 
 @router.post(
     "/api/verify/",
@@ -359,6 +571,7 @@ async def api_verify(
                 }
             }
         },
+        202: {"description": "Account already created and waiting for email verification."},
         400: {"description": "Email or username already in use, or email already verified"},
         500: {"description": "Email sending failed"}
     }
@@ -379,10 +592,21 @@ async def api_register(
     if existing and existing.email_verified:
         raise HTTPException(status_code=400, detail="Email already verified")
 
+    now = datetime.utcnow()
     email_verification_token = secrets.token_urlsafe(32)
-    email_verification_expires = datetime.utcnow() + timedelta(hours=24)
+    email_verification_expires = _new_verification_expiry(now)
 
     if existing and not existing.active:
+        
+        if _verification_is_pending(existing, now):
+            return JSONResponse(
+                status_code = 202,
+                content = {"message": "Account already exists but not verified. Please check your email for the verification link.", "verification_pending": True}
+            )
+            
+        previous_token = existing.email_verification_token
+        previous_expires = existing.email_verification_expires
+        
         existing.email_verification_token = email_verification_token
         existing.email_verification_expires = email_verification_expires
         db.commit()
@@ -394,7 +618,8 @@ async def api_register(
         )
 
         if not email_sent:
-            db.delete(existing)
+            existing.email_verification_token = previous_token
+            existing.email_verification_expires = previous_expires
             db.commit()
             raise HTTPException(status_code=500, detail="Email sending failed")
 
@@ -480,6 +705,7 @@ async def verify_email(
         },
         400: {"description": "Email already verified"},
         404: {"description": "Email not found"},
+        429: {"description": "Too many requests. Retry later"},
         500: {"description": "Email sending failed"}
     }
 )
@@ -499,8 +725,23 @@ async def resend_verification(
     if user.email_verified:
         raise HTTPException(status_code=400, detail="Email already verified")
 
+    # token = secrets.token_urlsafe(32)
+    # expires = datetime.utcnow() + timedelta(hours=24)
+    
+    now = datetime.utcnow()
+    seconds_left = _seconds_until_resent_allowed(user, now)
+    if seconds_left > 0:
+        raise HTTPException(
+            status_code=429, 
+            detail=f"Too many requests. Please wait {seconds_left} seconds before requesting a new verification email.",
+            headers={"Retry-After": str(seconds_left)}
+        )
+        
+    previous_token = user.email_verification_token
+    previous_expires = user.email_verification_expires
+    
     token = secrets.token_urlsafe(32)
-    expires = datetime.utcnow() + timedelta(hours=24)
+    expires = _new_verification_expiry(now)
 
     user.email_verification_token = token
     user.email_verification_expires = expires
@@ -513,6 +754,9 @@ async def resend_verification(
     )
 
     if not email_sent:
+        user.email_verification_token = previous_token
+        user.email_verification_expires = previous_expires
+        db.commit()
         raise HTTPException(status_code=500, detail="Email sending failed")
 
     return {"message": "Verification email sent again"}

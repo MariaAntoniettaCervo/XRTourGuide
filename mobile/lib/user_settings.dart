@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'models/app_colors.dart';
@@ -7,7 +9,13 @@ import 'main.dart'; // Import your main app file for navigation
 import 'services/auth_service.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:easy_localization/easy_localization.dart';
-
+import 'services/analytics_service.dart';
+import 'utils/responsive.dart';
+import 'utils/platform_page_route.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'server_selection_screen.dart';
+import 'services/local_state_service.dart';
+import 'providers/home_providers.dart';
 
 // Enum to track which profile screen is currently active
 enum ProfileScreenState {
@@ -16,12 +24,12 @@ enum ProfileScreenState {
   accountSecurity,
   appLanguage,
   helpSupport,
+  about,
 }
 
 // final authServiceProvider = ChangeNotifierProvider<AuthService>((ref) {
 //   return AuthService();
 // });
-
 
 class UserProfileScreen extends ConsumerStatefulWidget {
   const UserProfileScreen({Key? key}) : super(key: key);
@@ -32,8 +40,8 @@ class UserProfileScreen extends ConsumerStatefulWidget {
 
 class _UserProfileScreenState extends ConsumerState<UserProfileScreen> {
   late TourService _tourService;
-
   late AuthService _authService;
+  late AnalyticsService _analytics;
 
   // Current screen state - starts with main profile
   ProfileScreenState _currentScreen = ProfileScreenState.main;
@@ -42,22 +50,28 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen> {
   User? _user;
   bool _isLoadingUserDetails = true;
 
-  // Security settings
-  bool _biometricEnabled = false;
-  bool _faceIdEnabled = false;
-
   // Language settings
   //TODO : Implement language selection logic
   final List<Map<String, dynamic>> _availableLanguages = [
-    {"name": "English(US)", "locale": const Locale('en', 'US'), "flag": "🇺🇸", "selected": false},
-    {"name": "Italiano", "locale": const Locale('it', 'IT'), "flag": "🇮🇹", "selected": true},
+    {
+      "name": "English(US)",
+      "locale": const Locale('en', 'US'),
+      "flag": "🇺🇸",
+      "selected": false,
+    },
+    {
+      "name": "Italiano",
+      "locale": const Locale('it', 'IT'),
+      "flag": "🇮🇹",
+      "selected": true,
+    },
   ];
 
   // Controllers for text fields (Personal Info)
   final TextEditingController _firstNameController = TextEditingController();
   final TextEditingController _lastNameController = TextEditingController();
   final TextEditingController _descriptionController = TextEditingController();
-  
+
   final TextEditingController _emailController = TextEditingController();
 
   // NEW: Controllers for Change Password fields
@@ -71,6 +85,7 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen> {
     super.initState();
     _authService = ref.read(authServiceProvider);
     _tourService = ref.read(tourServiceProvider);
+    _analytics = ref.read(analyticsServiceProvider);
     _loadData();
   }
 
@@ -100,7 +115,7 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen> {
           // Set an error message if loading fails
           // _error = 'Failed to load user details: $e'; // You can uncomment this if you want to display the error directly
         });
-        _showError('Error loading user Details');
+        _showError('error_loading_user_details'.tr());
       }
     }
   }
@@ -161,11 +176,21 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen> {
 
   // Navigate to home/explore screen
   void _navigateToExplore(BuildContext context) {
-    // Navigate to TravelExplorerScreen
-    // Navigator.of(context).pushReplacement(
-    //   MaterialPageRoute(builder: (context) => const TravelExplorerScreen()),
-    // );
     Navigator.of(context).popUntil((route) => route.isFirst);
+  }
+
+  void _navigateToAbout() {
+    setState(() {
+      _currentScreen = ProfileScreenState.about;
+    });
+  }
+
+  Future<void> _openExternalUrl(String url) async {
+    final uri = Uri.parse(url);
+
+    if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
+      _showError('error_launching_links'.tr());
+    }
   }
 
   // Show logout confirmation bottom sheet
@@ -202,7 +227,7 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen> {
       },
     );
 
-    if (result == true && mounted){
+    if (result == true && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('delete_account_success'.tr()),
@@ -212,23 +237,23 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen> {
       // Esegui logout o naviga alla schermata iniziale
       _logout(context);
     }
-
   }
 
-void _handleBack(BuildContext context) {
-  if (_currentScreen == ProfileScreenState.main) {
-    Navigator.of(context).pop(true); // Torna alla schermata precedente
-  } else {
-    setState(() {
-      _currentScreen = ProfileScreenState.main; // Torna alla schermata principale del profilo
-    });
+  void _handleBack(BuildContext context) {
+    if (_currentScreen == ProfileScreenState.main) {
+      Navigator.of(context).pop(true); // Torna alla schermata precedente
+    } else {
+      setState(() {
+        _currentScreen =
+            ProfileScreenState
+                .main; // Torna alla schermata principale del profilo
+      });
+    }
   }
-}
 
   // Save personal info changes
   void _savePersonalInfo() async {
-    //TODO: Implement actual save logic, e.g., API call to update user details
-      _authService.updateAccount(
+    _authService.updateAccount(
       _firstNameController.text,
       _lastNameController.text,
       _emailController.text,
@@ -253,8 +278,17 @@ void _handleBack(BuildContext context) {
 
   // Save language selection
   void _saveLanguageSelection(Locale selectedLocale) {
-
     context.setLocale(selectedLocale);
+
+    ref.invalidate(nearbyToursProvider); // Invalidate nearby tours to reload with new language
+    ref.invalidate(categoriesProvider); // Invalidate categories to reload with new language
+
+    unawaited(
+      _analytics.logEvent(
+        name: 'change_language',
+        parameters: {'language': selectedLocale.toString()},
+      ),
+    );
 
     setState(() {
       _currentScreen = ProfileScreenState.main;
@@ -281,12 +315,9 @@ void _handleBack(BuildContext context) {
     }
     if (newPassword.length < 6) {
       // Example validation
-      _showError('new_password_min_length');
+      _showError('new_password_min_length'.tr());
       return;
     }
-
-    print('Attempting to change password:');
-    print('Old: $oldPassword, New: $newPassword');
 
     _authService.updatePassword(oldPassword, newPassword);
 
@@ -313,13 +344,29 @@ void _handleBack(BuildContext context) {
     Navigator.of(context).pop(); // Close the bottom sheet
     await authService.logout(); // Call the logout method from AuthService
     Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute(
-        builder: (context) => const AuthChecker(),
+      platformPageRoute(builder: (context) => const AuthChecker()),
+      (route) => false,
+    );
+    // Navigate back to login or onboarding screen
+    debugPrint('User logged out');
+  }
+
+  Future<void> _changeServer(BuildContext context) async {
+    await ref.read(localStateServiceProvider).clearSelectedServer();
+
+    ref.invalidate(nearbyToursProvider);
+    ref.invalidate(categoriesProvider);
+    
+    if (!mounted) return;
+
+    Navigator.of(context).pushAndRemoveUntil(
+      platformPageRoute(
+        builder:
+            (_) =>
+                const WelcomeScreen(isGuest: false, initialErrorMessage: null),
       ),
       (route) => false,
-    );                            
-    // Navigate back to login or onboarding screen
-    print('User logged out');
+    );
   }
 
   // Build the main profile screen
@@ -380,35 +427,14 @@ void _handleBack(BuildContext context) {
                                 ),
                               ),
                             ),
-                            // Camera icon for changing profile picture
-                            // Positioned(
-                            //   bottom: 0,
-                            //   right: 0,
-                            //   child: Container(
-                            //     padding: const EdgeInsets.all(4),
-                            //     decoration: BoxDecoration(
-                            //       color: AppColors.background,
-                            //       shape: BoxShape.circle,
-                            //       border: Border.all(
-                            //         color: AppColors.primary,
-                            //         width: 2,
-                            //       ),
-                            //     ),
-                            //     child: const Icon(
-                            //       Icons.camera_alt,
-                            //       color: AppColors.primary,
-                            //       size: 20,
-                            //     ),
-                            //   ),
-                            // ),
                           ],
                         ),
                         const SizedBox(height: 16),
                         // User name
                         Text(
                           '${_user!.name} ${_user!.surname}',
-                          style: const TextStyle(
-                            fontSize: 20,
+                          style: TextStyle(
+                            fontSize: context.r.sp(20),
                             fontWeight: FontWeight.bold,
                             color: AppColors.textPrimary,
                           ),
@@ -417,8 +443,8 @@ void _handleBack(BuildContext context) {
                         // User email
                         Text(
                           _user!.mail,
-                          style: const TextStyle(
-                            fontSize: 14,
+                          style: TextStyle(
+                            fontSize: context.r.sp(14),
                             color: AppColors.textSecondary,
                           ),
                         ),
@@ -448,12 +474,17 @@ void _handleBack(BuildContext context) {
                     onTap: _navigateToAppLanguage,
                   ),
 
-                  // Help & Support
-                  // _buildMenuItemTile(
-                  //   title: 'help_support_title'.tr(),
-                  //   icon: Icons.help_outline,
-                  //   onTap: _navigateToHelpSupport,
-                  // ),
+                  _buildMenuItemTile(
+                    title: "About",
+                    icon: Icons.info_outline,
+                    onTap: _navigateToAbout,
+                  ),
+
+                  _buildMenuItemTile(
+                    title: 'change_server'.tr(),
+                    icon: Icons.dns_outlined,
+                    onTap: () => _changeServer(context),
+                  ),
 
                   // Logout - with different styling
                   _buildMenuItemTile(
@@ -499,7 +530,7 @@ void _handleBack(BuildContext context) {
             Text(
               title,
               style: TextStyle(
-                fontSize: 16,
+                fontSize: context.r.sp(16),
                 fontWeight: FontWeight.w500,
                 color: textColor,
               ),
@@ -531,7 +562,7 @@ void _handleBack(BuildContext context) {
           'personal_info_title'.tr(),
           style: TextStyle(
             color: AppColors.textPrimary,
-            fontSize: 18,
+            fontSize: context.r.sp(18),
             fontWeight: FontWeight.bold,
           ),
         ),
@@ -550,7 +581,7 @@ void _handleBack(BuildContext context) {
                     Text(
                       'name'.tr(),
                       style: TextStyle(
-                        fontSize: 16,
+                        fontSize: context.r.sp(16),
                         fontWeight: FontWeight.w500,
                         color: AppColors.textPrimary,
                       ),
@@ -587,7 +618,7 @@ void _handleBack(BuildContext context) {
                     Text(
                       'surname'.tr(),
                       style: TextStyle(
-                        fontSize: 16,
+                        fontSize: context.r.sp(16),
                         fontWeight: FontWeight.w500,
                         color: AppColors.textPrimary,
                       ),
@@ -621,12 +652,11 @@ void _handleBack(BuildContext context) {
 
                     const SizedBox(height: 20),
 
-
                     // Email field
                     Text(
                       'email'.tr(),
                       style: TextStyle(
-                        fontSize: 16,
+                        fontSize: context.r.sp(16),
                         fontWeight: FontWeight.w500,
                         color: AppColors.textPrimary,
                       ),
@@ -667,7 +697,7 @@ void _handleBack(BuildContext context) {
                     Text(
                       'description'.tr(),
                       style: TextStyle(
-                        fontSize: 16,
+                        fontSize: context.r.sp(16),
                         fontWeight: FontWeight.w500,
                         color: AppColors.textPrimary,
                       ),
@@ -700,13 +730,10 @@ void _handleBack(BuildContext context) {
                         ),
                       ),
                     ),
-
                   ],
                 ),
               ),
             ),
-
-
 
             // Save button
             Padding(
@@ -725,7 +752,10 @@ void _handleBack(BuildContext context) {
                   ),
                   child: Text(
                     'save'.tr(),
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                    style: TextStyle(
+                      fontSize: context.r.sp(16),
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                 ),
               ),
@@ -751,7 +781,7 @@ void _handleBack(BuildContext context) {
           'account_security_title',
           style: TextStyle(
             color: AppColors.textPrimary,
-            fontSize: 18,
+            fontSize: context.r.sp(18),
             fontWeight: FontWeight.bold,
           ),
         ),
@@ -763,28 +793,6 @@ void _handleBack(BuildContext context) {
             Expanded(
               child: ListView(
                 children: [
-                  // // Biometric ID toggle (Commented out as in your original)
-                  // _buildToggleSettingTile(
-                  //   title: 'Biometric ID',
-                  //   value: _biometricEnabled,
-                  //   onChanged: (value) {
-                  //     setState(() {
-                  //       _biometricEnabled = value;
-                  //     });
-                  //   },
-                  // ),
-
-                  // // Face ID toggle (Commented out as in your original)
-                  // _buildToggleSettingTile(
-                  //   title: 'Face ID',
-                  //   value: _faceIdEnabled,
-                  //   onChanged: (value) {
-                  //     setState(() {
-                  //       _faceIdEnabled = value;
-                  //     });
-                  //   },
-                  // ),
-
                   // Change Password option - NOW CALLS THE BOTTOM SHEET
                   _buildSettingTile(
                     title: 'change_password'.tr(),
@@ -799,8 +807,7 @@ void _handleBack(BuildContext context) {
                   _buildSettingTile(
                     title: 'delete_account_title'.tr(),
                     titleColor: Colors.red,
-                    subtitle:
-                        'delete_account_subtitle'.tr(),
+                    subtitle: 'delete_account_subtitle'.tr(),
                     onTap: () {
                       _showDeleteAccountSheet(context);
                       // Show delete account confirmation
@@ -834,8 +841,8 @@ void _handleBack(BuildContext context) {
         children: [
           Text(
             title,
-            style: const TextStyle(
-              fontSize: 16,
+            style: TextStyle(
+              fontSize: context.r.sp(16),
               fontWeight: FontWeight.w500,
               color: AppColors.textPrimary,
             ),
@@ -884,7 +891,7 @@ void _handleBack(BuildContext context) {
                   Text(
                     title,
                     style: TextStyle(
-                      fontSize: 16,
+                      fontSize: context.r.sp(16),
                       fontWeight: FontWeight.w500,
                       color: titleColor,
                     ),
@@ -893,8 +900,8 @@ void _handleBack(BuildContext context) {
                     const SizedBox(height: 4),
                     Text(
                       subtitle,
-                      style: const TextStyle(
-                        fontSize: 12,
+                      style: TextStyle(
+                        fontSize: context.r.sp(12),
                         color: AppColors.textSecondary,
                       ),
                     ),
@@ -928,7 +935,7 @@ void _handleBack(BuildContext context) {
           'language'.tr(),
           style: TextStyle(
             color: AppColors.textPrimary,
-            fontSize: 18,
+            fontSize: context.r.sp(18),
             fontWeight: FontWeight.bold,
           ),
         ),
@@ -943,7 +950,7 @@ void _handleBack(BuildContext context) {
                 itemBuilder: (context, index) {
                   final language = _availableLanguages[index];
                   final languageLocale = language["locale"] as Locale;
-                  final isSelected = context.locale == languageLocale; 
+                  final isSelected = context.locale == languageLocale;
 
                   return InkWell(
                     onTap: () {
@@ -980,7 +987,7 @@ void _handleBack(BuildContext context) {
                           Text(
                             language["name"],
                             style: TextStyle(
-                              fontSize: 16,
+                              fontSize: context.r.sp(16),
                               fontWeight:
                                   isSelected
                                       ? FontWeight.bold
@@ -1019,11 +1026,11 @@ void _handleBack(BuildContext context) {
           icon: const Icon(Icons.arrow_back, color: AppColors.textPrimary),
           onPressed: () => _handleBack(context),
         ),
-        title: const Text(
+        title: Text(
           'help_support_title',
           style: TextStyle(
             color: AppColors.textPrimary,
-            fontSize: 18,
+            fontSize: context.r.sp(18),
             fontWeight: FontWeight.bold,
           ),
         ),
@@ -1038,31 +1045,31 @@ void _handleBack(BuildContext context) {
                   _buildSettingTile(
                     title: 'FAQs',
                     onTap: () {
-                      print('Navigate to FAQs');
+                      debugPrint('Navigate to FAQs');
                     },
                   ),
                   _buildSettingTile(
                     title: 'Contact Support',
                     onTap: () {
-                      print('Navigate to Contact Support');
+                      debugPrint('Navigate to Contact Support');
                     },
                   ),
                   _buildSettingTile(
                     title: 'Report a Bug',
                     onTap: () {
-                      print('Navigate to Report a Bug');
+                      debugPrint('Navigate to Report a Bug');
                     },
                   ),
                   _buildSettingTile(
                     title: 'Privacy Policy',
                     onTap: () {
-                      print('Navigate to Privacy Policy');
+                      debugPrint('Navigate to Privacy Policy');
                     },
                   ),
                   _buildSettingTile(
                     title: 'Terms of Service',
                     onTap: () {
-                      print('Navigate to Terms of Service');
+                      debugPrint('Navigate to Terms of Service');
                     },
                   ),
                 ],
@@ -1072,6 +1079,170 @@ void _handleBack(BuildContext context) {
             // Bottom navigation bar
             _buildBottomNavBar(context, 1), // 1 = Profile tab selected
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAboutScreen(BuildContext context) {
+    final sponsors = [
+      {
+        "name": "Futural",
+        "logo": "assets/about/futural-logo.png",
+        "url": "https://futural-project.eu",
+      },
+      {
+        "name": "European Union",
+        "logo": "assets/about/europe.png",
+        "url": "https://european-union.europa.eu",
+      },
+    ];
+
+    final developers = [
+      {
+        "name": "Unisa",
+        "logo": "assets/about/logo_unisa.png",
+        "url": "https://www.unisa.it/",
+      },
+      {
+        "name": "Comunità Montana Bussento Lambro e Mingardo",
+        "logo": "assets/about/logo_bussento.png",
+        "url": "https://www.cmbussento.it",
+      },
+      {
+        "name": "Picaresque",
+        "logo": "assets/about/picaresque-logo.png",
+        "url": "https://tech.picaresquestudio.com/",
+      },
+    ];
+
+    return Scaffold(
+      backgroundColor: AppColors.background,
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back, color: AppColors.textPrimary),
+          onPressed: () => _handleBack(context),
+        ),
+        title: Text(
+          'about_title'.tr(),
+          style: TextStyle(
+            color: AppColors.textPrimary,
+            fontSize: context.r.sp(18),
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        centerTitle: true,
+      ),
+      body: SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  border: Border.all(color: AppColors.border),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(
+                  'about_content'.tr(),
+                  style: TextStyle(
+                    fontSize: context.r.sp(16),
+                    color: AppColors.textPrimary,
+                    height: 1.5,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+              const SizedBox(height: 24),
+
+              Wrap(
+                spacing: 16,
+                runSpacing: 16,
+                alignment: WrapAlignment.center,
+                children:
+                    sponsors.map((partner) {
+                      return InkWell(
+                        onTap: () => _openExternalUrl(partner['url']!),
+                        borderRadius: BorderRadius.circular(16),
+                        child: Container(
+                          width: 110,
+                          height: 90,
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            border: Border.all(color: AppColors.border),
+                            borderRadius: BorderRadius.circular(16),
+                            boxShadow: const [
+                              BoxShadow(
+                                color: AppColors.cardShadow,
+                                blurRadius: 4,
+                                offset: Offset(0, 2),
+                              ),
+                            ],
+                          ),
+                          child: Image.asset(
+                            partner['logo']!,
+                            fit: BoxFit.contain,
+                          ),
+                        ),
+                      );
+                    }).toList(),
+              ),
+
+              const SizedBox(height: 32),
+
+              Text(
+                'about_developed_by'.tr(),
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: context.r.sp(16),
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.textPrimary,
+                ),
+              ),
+
+              const SizedBox(height: 16),
+
+              Wrap(
+                spacing: 16,
+                runSpacing: 16,
+                alignment: WrapAlignment.center,
+                children:
+                    developers.map((partner) {
+                      return InkWell(
+                        onTap: () => _openExternalUrl(partner['url']!),
+                        borderRadius: BorderRadius.circular(16),
+                        child: Container(
+                          width: 110,
+                          height: 90,
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            border: Border.all(color: AppColors.border),
+                            borderRadius: BorderRadius.circular(16),
+                            boxShadow: const [
+                              BoxShadow(
+                                color: AppColors.cardShadow,
+                                blurRadius: 4,
+                                offset: Offset(0, 2),
+                              ),
+                            ],
+                          ),
+                          child: Image.asset(
+                            partner['logo']!,
+                            fit: BoxFit.contain,
+                          ),
+                        ),
+                      );
+                    }).toList(),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -1104,10 +1275,10 @@ void _handleBack(BuildContext context) {
           const SizedBox(height: 20),
 
           // Logout title
-          const Text(
+          Text(
             'Logout',
             style: TextStyle(
-              fontSize: 20,
+              fontSize: context.r.sp(20),
               fontWeight: FontWeight.bold,
               color: AppColors.textPrimary,
             ),
@@ -1133,7 +1304,7 @@ void _handleBack(BuildContext context) {
           Text(
             'logout_confirm'.tr(),
             style: TextStyle(
-              fontSize: 16,
+              fontSize: context.r.sp(16),
               fontWeight: FontWeight.w500,
               color: AppColors.textPrimary,
             ),
@@ -1198,7 +1369,8 @@ void _handleBack(BuildContext context) {
   }
 
   Widget _buildDeleteAccountSheet(BuildContext context) {
-  final TextEditingController _deletePasswordController = TextEditingController();
+    final TextEditingController _deletePasswordController =
+        TextEditingController();
 
     return Container(
       padding: EdgeInsets.only(
@@ -1230,7 +1402,7 @@ void _handleBack(BuildContext context) {
             Text(
               'delete_account_title'.tr(),
               style: TextStyle(
-                fontSize: 20,
+                fontSize: context.r.sp(20),
                 fontWeight: FontWeight.bold,
                 color: AppColors.textPrimary,
               ),
@@ -1247,7 +1419,7 @@ void _handleBack(BuildContext context) {
                     'delete_account_confirm'.tr(),
                     textAlign: TextAlign.center,
                     style: TextStyle(
-                      fontSize: 16,
+                      fontSize: context.r.sp(16),
                       color: AppColors.textPrimary,
                     ),
                   ),
@@ -1307,7 +1479,9 @@ void _handleBack(BuildContext context) {
                       Expanded(
                         child: ElevatedButton(
                           onPressed: () async {
-                            await _authService.deleteAccount(_deletePasswordController.text);
+                            await _authService.deleteAccount(
+                              _deletePasswordController.text,
+                            );
                             Navigator.of(context).pop(true); // Close the sheet
                           },
                           style: ElevatedButton.styleFrom(
@@ -1368,7 +1542,7 @@ void _handleBack(BuildContext context) {
             Text(
               'change_password'.tr(),
               style: TextStyle(
-                fontSize: 20,
+                fontSize: context.r.sp(20),
                 fontWeight: FontWeight.bold,
                 color: AppColors.textPrimary,
               ),
@@ -1383,7 +1557,7 @@ void _handleBack(BuildContext context) {
                   Text(
                     'old_password',
                     style: TextStyle(
-                      fontSize: 16,
+                      fontSize: context.r.sp(16),
                       fontWeight: FontWeight.w500,
                       color: AppColors.textPrimary,
                     ),
@@ -1421,7 +1595,7 @@ void _handleBack(BuildContext context) {
                   Text(
                     'new_password'.tr(),
                     style: TextStyle(
-                      fontSize: 16,
+                      fontSize: context.r.sp(16),
                       fontWeight: FontWeight.w500,
                       color: AppColors.textPrimary,
                     ),
@@ -1459,7 +1633,7 @@ void _handleBack(BuildContext context) {
                   Text(
                     'confirm_new_password'.tr(),
                     style: TextStyle(
-                      fontSize: 16,
+                      fontSize: context.r.sp(16),
                       fontWeight: FontWeight.w500,
                       color: AppColors.textPrimary,
                     ),
@@ -1590,6 +1764,8 @@ void _handleBack(BuildContext context) {
         return _buildAppLanguageScreen(context);
       case ProfileScreenState.helpSupport:
         return _buildHelpSupportScreen(context);
+      case ProfileScreenState.about:
+        return _buildAboutScreen(context);
       default:
         return _buildMainProfileScreen(context);
     }

@@ -107,3 +107,44 @@ def get_reviews_by_user(request):
     }
 
     return Response(response_data)
+
+@swagger_auto_schema(
+    method='get',
+    operation_summary="Check if current user already reviewed a tour",
+    manual_parameters=[
+        openapi.Parameter(
+            'tour_id',
+            openapi.IN_PATH,
+            description="ID of the tour",
+            type=openapi.TYPE_INTEGER,
+            required=True
+        )
+    ],
+    responses={
+        200: openapi.Response(
+            description="Boolean flag",
+            schema=openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={
+                    'has_reviewed': openapi.Schema(type=openapi.TYPE_BOOLEAN)
+                }
+            )
+        ),
+        404: openapi.Response(description="Tour not found")
+    }
+)
+@api_view(['GET'])
+@authentication_classes([JWTFastAPIAuthentication])
+@permission_classes([IsAuthenticated])
+def has_reviewed_tour(request, tour_id):
+    try:
+        Tour.objects.get(id=tour_id)
+    except Tour.DoesNotExist:
+        return Response({"detail": "Tour not found"}, status=status.HTTP_404_NOT_FOUND)
+
+    has_reviewed = Review.objects.filter(
+        user=request.user,
+        tour_id=tour_id
+    ).exists()
+
+    return Response({"has_reviewed": has_reviewed}, status=status.HTTP_200_OK)

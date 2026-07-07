@@ -51,7 +51,7 @@ class DefaultFirebaseOptions {
 
   static const FirebaseOptions android = FirebaseOptions(
     apiKey: 'AIzaSyDH2QrpSHop8tIaKgRfz2Ci8FE69ui4Ngw',
-    appId: '1:386701849330:android:364d19e4166ee02c33d66b',
+    appId: '1:386701849330:android:5700dfc4fa91527e33d66b',
     messagingSenderId: '386701849330',
     projectId: 'xrtourguide-c8084',
     storageBucket: 'xrtourguide-c8084.firebasestorage.app',
@@ -59,11 +59,11 @@ class DefaultFirebaseOptions {
 
   static const FirebaseOptions ios = FirebaseOptions(
     apiKey: 'AIzaSyAd4FeDiIAaV8fV0hDCFgHiar5Q09-7OVQ',
-    appId: '1:386701849330:ios:bad0d01ca6f1062233d66b',
+    appId: '1:386701849330:ios:d8e0fe1356926b6533d66b',
     messagingSenderId: '386701849330',
     projectId: 'xrtourguide-c8084',
     storageBucket: 'xrtourguide-c8084.firebasestorage.app',
-    iosBundleId: 'com.isislab.xrTourGuide',
+    iosBundleId: 'com.picaresque.xrtourguide',
   );
 
 }

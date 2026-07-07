@@ -61,7 +61,7 @@ class _AudioPlayerWidgetState extends State<AudioPlayerWidget> {
         }
       });
     } catch (e) {
-      print("Error loading audio: $e");
+      debugPrint("Error loading audio: $e");
       // Consider showing an error message to the user
     }
   }

@@ -1,0 +1,10 @@
+{% extends "admin/change_form.html" %}
+{% load static i18n %}
+
+{% block extrahead %}
+    {{ block.super }}
+    <link rel="icon" type="image/png" href="{% static 'admin/img/XRTOURGUIDE.png' %}?v=4">
+    <link rel="shortcut icon" href="{% static 'admin/img/XRTOURGUIDE.png' %}?v=4">
+    <link rel="apple-touch-icon" href="{% static 'admin/img/XRTOURGUIDE.png' %}?v=4">
+    <link rel="stylesheet" href="{% static 'admin/css/xrtourguide-brand.css' %}">
+{% endblock %}

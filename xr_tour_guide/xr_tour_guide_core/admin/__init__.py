@@ -15,5 +15,5 @@ __all__ = [
 ]
 
 admin.site.site_header = "🗺️ Tour Management System"
-admin.site.site_title = "Tour Admin"
+admin.site.site_title = "XRTourGuide"
 admin.site.index_title = "Benvenuto nel pannello di gestione tour"

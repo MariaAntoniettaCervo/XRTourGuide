@@ -289,7 +289,7 @@ Extract and download pmtiles file for a tour based on waypoint coordinates.
   "title": "Tour Title",
   "subtitle": "Tour Subtitle",
   "place": "Location Name",
-  "category": "INSIDE|OUTSIDE|THING|MIXED",
+  "category": "INSIDE|OUTDOOR|THING|MIXED",
   "description": "Tour description",
   "user": 456,
   "lat": "40.7128",

@@ -6,6 +6,8 @@ import '/services/tour_service.dart'; // Adjust path as needed
 import 'package:flutter_riverpod/flutter_riverpod.dart'; // Import Riverpod for state management
 import "package:easy_localization/easy_localization.dart";
 
+import 'utils/responsive.dart';
+
 
 
 class ReviewListScreen extends ConsumerStatefulWidget {
@@ -144,16 +146,16 @@ class _ReviewListScreenState extends ConsumerState<ReviewListScreen> {
                   children: [
                     Text(
                       name,
-                      style: const TextStyle(
-                        fontSize: 16,
+                      style: TextStyle(
+                        fontSize: context.r.sp(16),
                         fontWeight: FontWeight.bold,
                         color: AppColors.textPrimary,
                       ),
                     ),
                     Text(
                       date,
-                      style: const TextStyle(
-                        fontSize: 12,
+                      style: TextStyle(
+                        fontSize: context.r.sp(12),
                         color: AppColors.textSecondary,
                       ),
                     ),
@@ -174,8 +176,8 @@ class _ReviewListScreenState extends ConsumerState<ReviewListScreen> {
                     const SizedBox(width: 4),
                     Text(
                       rating.toString(),
-                      style: const TextStyle(
-                        fontSize: 14,
+                      style: TextStyle(
+                        fontSize: context.r.sp(14),
                         fontWeight: FontWeight.bold,
                         color: AppColors.textPrimary,
                       ),
@@ -191,8 +193,8 @@ class _ReviewListScreenState extends ConsumerState<ReviewListScreen> {
           // Review comment
           Text(
             comment,
-            style: const TextStyle(
-              fontSize: 14,
+            style: TextStyle(
+              fontSize: context.r.sp(14),
               color: AppColors.textSecondary,
               height: 1.5,
             ),
@@ -200,18 +202,6 @@ class _ReviewListScreenState extends ConsumerState<ReviewListScreen> {
 
           const SizedBox(height: 8),
 
-          // Read more button
-          // GestureDetector(
-          //   onTap: () {},
-          //   child: const Text(
-          //     'Read more',
-          //     style: TextStyle(
-          //       fontSize: 14,
-          //       fontWeight: FontWeight.bold,
-          //       color: AppColors.primary,
-          //     ),
-          //   ),
-          // ),
         ],
       ),
     );
@@ -237,16 +227,18 @@ class _ReviewListScreenState extends ConsumerState<ReviewListScreen> {
               if (widget.isTour)
                 Text(
                   widget.tourName ?? '',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                     color: Colors.black,
-                    fontSize: 22,
+                    fontSize: context.r.sp(22),
                     fontWeight: FontWeight.bold,
                   ),
                 ),
-                SizedBox(width: 8),
+                if (widget.isTour) const SizedBox(width: 8),
               Text(
                 "num_reviews".tr(namedArgs: {'count': '${_reviews.length}'}),
-                style: TextStyle(color: Colors.grey[600], fontSize: 16),
+                style: TextStyle(color: Colors.grey[600], fontSize: context.r.sp(16)),
               ),
             ],
           ),

@@ -30,4 +30,8 @@ app.conf.beat_schedule = {
         'task': 'xr_tour_guide.tasks.remove_sub_tours',
         'schedule': timedelta(minutes=30),
     },
+    'clear-ai-inference-cache-daily': {
+        'task': 'xr_tour_guide.tasks.clear_ai_inference_cache',
+        'schedule': 24 * 60 * 60,
+    }
 }

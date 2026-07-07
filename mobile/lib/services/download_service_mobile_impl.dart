@@ -57,7 +57,7 @@ class MobileDownloadService implements DownloadService {
         // If you still encounter issues for API 33+ with downloads, consider adding the above block.
         // For now, relying on Notification permission and FlutterDownloader's internal handling
         // for public storage writes is usually sufficient for modern Android.
-        print(
+        debugPrint(
           'Android SDK >= 33. Relying on Scoped Storage/MediaStore for downloads.',
         );
         return true; // Assume success if notification is granted and platform handles storage
@@ -116,7 +116,7 @@ class MobileDownloadService implements DownloadService {
       // Step 1: Ensure permissions are granted before proceeding
       bool permissionsReady = await _ensurePermissionsGranted(showSnackBar);
       if (!permissionsReady) {
-        print('Permissions not ready. Aborting download.');
+        debugPrint('Permissions not ready. Aborting download.');
         return; // Exit if permissions are not granted
       }
 
@@ -152,7 +152,7 @@ class MobileDownloadService implements DownloadService {
       }
     } catch (e) {
       showSnackBar('An error occurred during download: $e', Colors.red);
-      print('Download error (Mobile): $e');
+      debugPrint('Download error (Mobile): $e');
     }
   }
 }

@@ -22,7 +22,7 @@ class WebDownloadService implements DownloadService {
       showSnackBar('Download initiated in your browser.', Colors.green);
     } catch (e) {
       showSnackBar('An error occurred during download: $e', Colors.red);
-      print('Download error (Web): $e');
+      debugPrint('Download error (Web): $e');
     }
   }
 }

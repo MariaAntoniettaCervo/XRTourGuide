@@ -19,6 +19,7 @@ LOGOUT_REDIRECT_URL = os.getenv('FORCE_SCRIPT_NAME')
 
 STATIC_URL = '/static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
+STATICFILES_DIRS = [BASE_DIR / 'static']
 
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
 EMAIL_HOST = 'smtp.gmail.com'
@@ -39,6 +40,8 @@ CORS_ORIGIN_ALLOW = True
 
 SECURE_SSL_REDIRECT = False
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+SECURE_REFERRER_POLICY = "strict-origin-when-cross-origin"
+SECURE_CROSS_ORIGIN_OPENER_POLICY = "same-origin-allow-popups"
 
 ALLOWED_HOSTS = [
     "localhost",
@@ -241,7 +244,7 @@ AWS_S3_FILE_OVERWRITE = False
 AWS_S3_USE_SSL = False
 AWS_DEFAULT_ACL = None
 AWS_S3_OBJECT_PARAMETERS = {
-    'CacheControl': 'max-age=86400',
+    'CacheControl': 'max-age=604800',
 }
 
 AUTH_PASSWORD_VALIDATORS = [
@@ -280,14 +283,15 @@ USE_TZ = True
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 UNFOLD = {
-    "SITE_TITLE": "Xr Tour Guide Login",
-    "SITE_HEADER": "Xr Tour Guide",
+    "SITE_TITLE": "XRTourGuide",
+    "SITE_HEADER": "XRTourGuide",
     # "SITE_TAGLINE": "Gestione contenuti",
-    # "SITE_LOGO": "/static/viewer/xr_tour_guide.png",
+    "SITE_LOGO": "/static/admin/img/XRTOURGUIDE.png",
     "SHOW_VIEW_ON_SITE": False,
     "DASHBOARD_CALLBACK": "xr_tour_guide.views.dashboard_callback",
     "STYLES": [
         lambda request: static("unfold/css/styles.css"),
+        lambda request: static("admin/css/xrtourguide-brand.css"),
     ],
     
     "SIDEBAR": {

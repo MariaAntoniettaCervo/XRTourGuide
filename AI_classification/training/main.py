@@ -1,8 +1,13 @@
 import sys
 import os
 import traceback
+from pathlib import Path
 
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+CURRENT_DIR = Path(__file__).resolve().parent
+PROJECT_ROOT = CURRENT_DIR.parent
+
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
@@ -15,6 +20,7 @@ import threading
 import subprocess
 import base64
 import dotenv
+import json
 
 dotenv.load_dotenv()
 
@@ -41,6 +47,7 @@ class Request(BaseModel):
     model_url: str | None = None
     poi_name: str | None = None
     poi_id: str | None = None
+    waypoint_gps: dict | None = None
 
 
 app = FastAPI()
@@ -125,6 +132,11 @@ def write_s3_file(file_path, remote_path):
     except Exception as e:
         print(f"Error writing file {file_path} to S3: {e}", flush=True)
 
+def _stream_output(stream, prefix=""):
+    for line in iter(stream.readline, ""):
+        if line:
+            print(f"{prefix}{line.rstrip()}", flush=True)
+    stream.close()
 
 def run_training_subproc(
     input_dir: str,
@@ -132,11 +144,15 @@ def run_training_subproc(
     tflite_model: str,
     tour_id: int,
     skip_pytorch: bool = False,
+    waypoint_gps_json: str | None = None,
 ):
     try:
+        train_script = CURRENT_DIR / "train_script.py"
+        
         cmd = [
             "python",
-            "train_script.py",
+            "-u",
+            str(train_script),
             "--input-dir",
             input_dir,
             "--output-dir",
@@ -147,20 +163,45 @@ def run_training_subproc(
             str(tour_id),
         ]
         
+        if waypoint_gps_json:
+            cmd.extend(["--waypoint-gps-json", waypoint_gps_json])
+        
         if skip_pytorch:
             cmd.append("--skip-pytorch")
         
         print("Running command:", " ".join(cmd), flush=True)
 
-        result = subprocess.run(cmd, check=False, capture_output=True, text=True)
+        # result = subprocess.run(cmd, check=False, capture_output=True, text=True, cwd=str(CURRENT_DIR))
         
-        if result.stdout:
-            print("Training output:", result.stdout, flush=True)
+        # if result.stdout:
+        #     print("Training output:", result.stdout, flush=True)
             
-        if result.stderr:
-            print("Training error output:", result.stderr, flush=True)
+        # if result.stderr:
+        #     print("Training error output:", result.stderr, flush=True)
+        
+        proc = subprocess.Popen(
+            cmd,
+            cwd=str(CURRENT_DIR),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            bufsize=1,
+        )
+        
+        threads = [
+            threading.Thread(target=_stream_output, args=(proc.stdout, "Training output")),
+            threading.Thread(target=_stream_output, args=(proc.stderr, "Training error output")),
+        ]
+        for t in threads:
+            t.daemon = True
+            t.start()
             
-        if result.returncode != 0:
+        returncode = proc.wait()
+        
+        for t in threads:
+            t.join()
+            
+        if returncode != 0:
             raise Exception(f"Training subprocess failed with return code {result.returncode}")
         
         return True
@@ -171,8 +212,14 @@ def run_training_subproc(
 
 def run_train(request: Request, view_dir: str, data_path: str):
     print("Content of directory:", os.listdir(data_path), flush=True)
-    tflite_model_path = "./resnet50.tflite"
+    tflite_model_path = str(CURRENT_DIR / "./EfficientNetLite0.tflite")
     try:
+        waypoint_gps_json = None
+        if request.waypoint_gps is not None:
+            waypoint_gps_json = os.path.join(view_dir, "waypoint_gps.json")
+            with open(waypoint_gps_json, "w", encoding="utf-8") as f:
+                json.dump(request.waypoint_gps, f, ensure_ascii=False, indent=2)
+        
         # RUN THE FULL PIPELINE
         result = run_training_subproc(
             input_dir=data_path,
@@ -180,6 +227,7 @@ def run_train(request: Request, view_dir: str, data_path: str):
             tflite_model=tflite_model_path,
             tour_id=int(request.poi_id),
             skip_pytorch=False,
+            waypoint_gps_json=waypoint_gps_json,
         )
         
         if not result:
@@ -189,17 +237,15 @@ def run_train(request: Request, view_dir: str, data_path: str):
         offline_model_path = os.path.join(view_dir, "training_data.json")
         print("AAAAAAAA", model_path, flush=True)
         
-        if not os.path.exists(model_path):
-            raise FileNotFoundError(f"Model file not found at {model_path}")
         if not os.path.exists(offline_model_path):
             raise FileNotFoundError(f"Offline model file not found at {offline_model_path}")
         
         print("Files exist, proceeding to upload to S3", flush=True)
         
         # LOAD ON MINIO
-        write_s3_file(
-            model_path, f"{request.poi_id}/model.pt"
-        )
+        # write_s3_file(
+        #     model_path, f"{request.poi_id}/model.pt"
+        # )
         
         write_s3_file(
             offline_model_path, f"{request.poi_id}/training_data.json"
@@ -208,7 +254,7 @@ def run_train(request: Request, view_dir: str, data_path: str):
         callback_payload = {
             "poi_id": int(request.poi_id),
             "poi_name": request.poi_name,
-            "model_url": f"{request.poi_id}/model.pt",
+            "model_url": f"{request.poi_id}/training_data.json",
             "index_url": f"{request.poi_id}/training_data.json",
             "status": "COMPLETED",
         }

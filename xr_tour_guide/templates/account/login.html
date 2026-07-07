@@ -715,7 +715,7 @@
                 <div class="divider">{% trans "or" %}</div>
 
                 <!-- Google Sign-In Button -->
-                <div class="d-grid mb-3">
+                <!-- <div class="d-grid mb-3">
                     <button class="btn-google" id="google-login-btn">
                         <svg class="google-icon" viewBox="0 0 24 24">
                             <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
@@ -725,6 +725,11 @@
                         </svg>
                         {% trans "Continue with Google" %}
                     </button>
+                </div> -->
+
+                <div class="d-grid mb-3" id="google-signin-block">
+                    <div id="google-signin-container" style="width: 100%; min-height: 44px; display: flex; justify-content: center;">
+                    </div>
                 </div>
 
                 <div class="signup-link" id="signup-section">
@@ -794,107 +799,165 @@ console.log('🔧 Google Client ID:', GOOGLE_CLIENT_ID ? 'Configured' : 'MISSING
 
 // ==================== GOOGLE SIGN-IN ====================
 
-function initGoogleSignIn() {
-    console.log('🔄 Initializing Google Sign-In');
+// function initGoogleSignIn() {
+//     console.log('🔄 Initializing Google Sign-In');
     
-    if (!GOOGLE_CLIENT_ID) {
-        console.error('❌ GOOGLE_CLIENT_ID not configured');
-        return;
-    }
+//     if (!GOOGLE_CLIENT_ID) {
+//         console.error('❌ GOOGLE_CLIENT_ID not configured');
+//         return;
+//     }
     
-    if (typeof google === 'undefined' || !google.accounts?.id) {
-        console.log('⏳ Google SDK not loaded yet, retrying...');
-        setTimeout(initGoogleSignIn, 200);
-        return;
-    }
+//     if (typeof google === 'undefined' || !google.accounts?.id) {
+//         console.log('⏳ Google SDK not loaded yet, retrying...');
+//         setTimeout(initGoogleSignIn, 200);
+//         return;
+//     }
     
-    try {
-        // Simple initialization without prompt
-        google.accounts.id.initialize({
-            client_id: GOOGLE_CLIENT_ID,
-            callback: handleGoogleCallback,
-            auto_select: false,
-        });
+//     try {
+//         // Simple initialization without prompt
+//         google.accounts.id.initialize({
+//             client_id: GOOGLE_CLIENT_ID,
+//             callback: handleGoogleCallback,
+//             auto_select: false,
+//         });
         
-        googleInitialized = true;
-        console.log('✅ Google Sign-In initialized successfully');
+//         googleInitialized = true;
+//         console.log('✅ Google Sign-In initialized successfully');
         
-    } catch (error) {
-        console.error('❌ Google initialization error:', error);
-        showErrorMessage('Google Sign-In configuration error: ' + error.message);
+//     } catch (error) {
+//         console.error('❌ Google initialization error:', error);
+//         showErrorMessage('Google Sign-In configuration error: ' + error.message);
+//     }
+// }
+
+    function initGoogleSignIn() {
+        console.log('Initializing Google Sign-In');
+
+        if (!GOOGLE_CLIENT_ID) {
+            console.error('GOOGLE_CLIENT_ID not configured');
+            showErrorMessage('Google Sign-In not configured. Please contact support.');
+            return;
+        }
+
+        if (typeof google === 'undefined' || !google.accounts || !google.accounts.id) {
+            console.log('Google SDK not loaded yet, retrying...');
+            setTimeout(initGoogleSignIn, 200);
+            return;
+        }
+
+        try {
+            google.accounts.id.initialize({
+                client_id: GOOGLE_CLIENT_ID,
+                callback: handleGoogleCallback,
+                ux_mode: 'popup',
+                auto_select: false,
+                cancel_on_tap_outside: true
+            });
+
+            const container = document.getElementById('google-signin-container');
+            if (!container) {
+                console.error('google-signin-container not found');
+                return;
+            }
+
+            container.innerHTML = '';
+            const buttonWidth = Math.min(400, Math.max(260, container.clientWidth || 320));
+
+            google.accounts.id.renderButton(container, {
+                type: 'standard',
+                theme: 'outline',
+                size: 'large',
+                text: 'continue_with',
+                shape: 'pill',
+                logo_alignment: 'left',
+                width: buttonWidth
+            });
+
+            googleInitialized = true;
+            console.log('Google Sign-In initialized successfully');
+        } catch (error) {
+            console.error('Google initialization error:', error);
+            showErrorMessage('Google Sign-In configuration error: ' + (error?.message || 'unknown error'));
+        }
     }
-}
+
+    // Initialize when DOM is ready
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', () => setTimeout(initGoogleSignIn, 100));
+    } else {
+        setTimeout(initGoogleSignIn, 100);
+    }
 
 // Initialize when DOM is ready
-if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', () => setTimeout(initGoogleSignIn, 100));
-} else {
-    setTimeout(initGoogleSignIn, 100);
-}
+// if (document.readyState === 'loading') {
+//     document.addEventListener('DOMContentLoaded', () => setTimeout(initGoogleSignIn, 100));
+// } else {
+//     setTimeout(initGoogleSignIn, 100);
+// }
 
 // Handle custom button click - Use renderButton approach
-document.getElementById('google-login-btn').addEventListener('click', function(e) {
-    e.preventDefault();
+// document.getElementById('google-login-btn').addEventListener('click', function(e) {
+//     e.preventDefault();
     
-    console.log('🖱️ Google button clicked');
+//     console.log('🖱️ Google button clicked');
     
-    if (!GOOGLE_CLIENT_ID) {
-        showErrorMessage('Google Sign-In not configured. Please contact support.');
-        return;
-    }
+//     if (!GOOGLE_CLIENT_ID) {
+//         showErrorMessage('Google Sign-In not configured. Please contact support.');
+//         return;
+//     }
     
-    if (!googleInitialized) {
-        showErrorMessage(translations.googleLoading);
-        setTimeout(initGoogleSignIn, 100);
-        return;
-    }
+//     if (!googleInitialized) {
+//         showErrorMessage(translations.googleLoading);
+//         setTimeout(initGoogleSignIn, 100);
+//         return;
+//     }
     
-    try {
-        // Create hidden container for Google button
-        const container = document.createElement('div');
-        container.id = 'hidden-google-button';
-        container.style.position = 'absolute';
-        container.style.top = '-9999px';
-        container.style.left = '-9999px';
-        container.style.width = '1px';
-        container.style.height = '1px';
-        container.style.overflow = 'hidden';
-        document.body.appendChild(container);
+//     try {
+//         // Create hidden container for Google button
+//         const container = document.createElement('div');
+//         container.id = 'hidden-google-button';
+//         container.style.position = 'absolute';
+//         container.style.top = '-9999px';
+//         container.style.left = '-9999px';
+//         container.style.width = '1px';
+//         container.style.height = '1px';
+//         container.style.overflow = 'hidden';
+//         document.body.appendChild(container);
         
-        console.log('✅ Rendering Google button...');
+//         console.log('✅ Rendering Google button...');
         
-        // Render the actual Google button
-        google.accounts.id.renderButton(container, {
-            type: 'standard',
-            theme: 'outline',
-            size: 'large',
-            text: 'continue_with',
-        });
+//         // Render the actual Google button
+//         google.accounts.id.renderButton(container, {
+//             type: 'standard',
+//             theme: 'outline',
+//             size: 'large',
+//             text: 'continue_with',
+//         });
         
-        // Wait then click it
-        setTimeout(() => {
-            const googleBtn = container.querySelector('div[role="button"]');
-            if (googleBtn) {
-                console.log('✅ Clicking Google button programmatically');
-                googleBtn.click();
-            } else {
-                console.error('❌ Could not find rendered Google button');
-                showErrorMessage('Failed to trigger Google Sign-In. Please try again.');
-            }
+//         // Wait then click it
+//         setTimeout(() => {
+//             const googleBtn = container.querySelector('div[role="button"]');
+//             if (googleBtn) {
+//                 console.log('✅ Clicking Google button programmatically');
+//                 googleBtn.click();
+//             } else {
+//                 console.error('❌ Could not find rendered Google button');
+//                 showErrorMessage('Failed to trigger Google Sign-In. Please try again.');
+//             }
             
-            // Cleanup after 2 seconds
-            setTimeout(() => {
-                if (container && container.parentNode) {
-                    container.parentNode.removeChild(container);
-                }
-            }, 2000);
-        }, 150);
+//             // Cleanup after 2 seconds
+//             setTimeout(() => {
+//                 if (container && container.parentNode) {
+//                     container.parentNode.removeChild(container);
+//                 }
+//             }, 2000);
+//         }, 150);
         
-    } catch (error) {
-        console.error('❌ Error triggering Google sign-in:', error);
-        showErrorMessage(translations.googleLoginError + ': ' + error.message);
-    }
-});
+//     } catch (error) {
+//         console.error('❌ Error triggering Google sign-in:', error);
+//         showErrorMessage(translations.googleLoginError + ': ' + error.message);
+//     }
+// });
 
 async function handleGoogleCallback(response) {
     console.log('🎯 Google callback received');
@@ -1017,15 +1080,18 @@ document.getElementById("show-reset-form").addEventListener("click", function(e)
     const loginForm = document.getElementById("login-form");
     const signupSection = document.getElementById("signup-section");
     const resendSection = document.getElementById("resend-section");
-    const googleBtn = document.querySelector('.btn-google').parentElement;
+    // const googleBtn = document.querySelector('.btn-google').parentElement;
+    const googleSigninBlock = document.getElementById("google-signin-block");
     const divider = document.querySelector('.divider');
     
     resetContainer.style.display = "block";
     loginForm.style.display = "none";
     signupSection.style.display = "none";
     resendSection.style.display = "none";
-    googleBtn.style.display = "none";
-    divider.style.display = "none";
+    // googleBtn.style.display = "none";
+    // divider.style.display = "none";
+    if (googleSigninBlock) googleSigninBlock.style.display = "none";
+    if (divider) divider.style.display = "none";
 });
 
 document.getElementById("cancel-reset").addEventListener("click", function(e) {
@@ -1034,7 +1100,8 @@ document.getElementById("cancel-reset").addEventListener("click", function(e) {
     const loginForm = document.getElementById("login-form");
     const signupSection = document.getElementById("signup-section");
     const resendSection = document.getElementById("resend-section");
-    const googleBtn = document.querySelector('.btn-google').parentElement;
+    // const googleBtn = document.querySelector('.btn-google').parentElement;
+    const googleSigninBlock = document.getElementById("google-signin-block");
     const divider = document.querySelector('.divider');
     const messageBox = document.getElementById("reset-message");
     
@@ -1042,8 +1109,10 @@ document.getElementById("cancel-reset").addEventListener("click", function(e) {
     loginForm.style.display = "block";
     signupSection.style.display = "block";
     resendSection.style.display = "block";
-    googleBtn.style.display = "block";
-    divider.style.display = "block";
+    // googleBtn.style.display = "block";
+    // divider.style.display = "block";
+    if (googleSigninBlock) googleSigninBlock.style.display = "block";
+    if (divider) divider.style.display = "block";
     messageBox.style.display = "none";
     document.getElementById("reset_email").value = "";
 });

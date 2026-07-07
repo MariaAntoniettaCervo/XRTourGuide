@@ -4,7 +4,7 @@ import 'secure_storage_service.dart';
 import 'auth_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-
+import 'dart:typed_data';
 
 class ApiService {
   final Dio _dio;
@@ -12,65 +12,73 @@ class ApiService {
   final Ref ref;
   // final AuthService _authService = AuthService();
 
-
   final excludedPaths = [
-  '/api/token/',
-  '/api/token/refresh/',
-  '/api_register/',
-  '/tour_list/',
-  '/tour_details/',
-  '/get_reviews_by_tour_id/',
-  '/tour_waypoints/',
-  '/get_waypoint_resources/',
-  '/health_check/',
-  '/stream_minio_resource/'
+    '/api/token/',
+    '/api/token/refresh/',
+    '/api_register/',
+    '/tour_list/',
+    '/tour_details/',
+    '/get_reviews_by_tour_id/',
+    '/tour_waypoints/',
+    '/get_waypoint_resources/',
+    '/health_check/',
+    '/stream_minio_resource/',
+    '/google-mobile-login/',
+    '/apple-mobile-login/',
   ];
 
-  static String appSignature = "com.isislab.xr_tour_guide";
+  static String appSignature = "APP_SIGNATURE_XR_TOUR_GUIDE_MOBILE";
+  
+  static String basicUrl = 'https://';
 
-  static String basicUrl = 'http://';
-  static const String centralizedUrl = 'http://172.16.15.136:8002';
-
-  // static const String centralizedUrl = 'https://xrtourguide.di.unisa.it/communityserver/';
-
+  static const String centralizedUrl =
+      'COMMUNITY_SERVER_URL'; // Sostituisci con l'URL del tuo server centrale
 
   ApiService(this.ref) : _dio = Dio(BaseOptions(baseUrl: centralizedUrl)) {
     _dio.interceptors.add(
       InterceptorsWrapper(
         onRequest: (options, handler) async {
-
-          if (options.extra.containsKey('baseUrl') && options.extra['baseUrl'] != null) {
+          if (options.extra.containsKey('baseUrl') &&
+              options.extra['baseUrl'] != null) {
             options.baseUrl = options.extra['baseUrl'];
           }
 
           options.headers['x-app-package'] = appSignature;
 
-          print("Request: ${options.baseUrl} ${options.method} ${options.path}");
+          debugPrint(
+            "Request: ${options.baseUrl} ${options.method} ${options.path}",
+          );
 
           if (excludedPaths.any((path) => options.path.contains(path))) {
-            print("Skipping bearer token");
-            return handler.next(options); // Skip adding token for excluded paths
+            debugPrint("Skipping bearer token");
+            return handler.next(
+              options,
+            ); // Skip adding token for excluded paths
           }
 
           final accessToken = await _storageService.getAccessToken();
-          print("Access Token: $accessToken");
+          debugPrint("Access Token: $accessToken");
           if (accessToken != null) {
             options.headers['Authorization'] = 'Bearer $accessToken';
           }
           return handler.next(options);
         },
         onError: (DioException e, handler) async {
-          if (excludedPaths.any((path) => e.requestOptions.path.contains(path))) {
-              return handler.next(e); // Salta il refresh per questi endpoint
+          if (excludedPaths.any(
+            (path) => e.requestOptions.path.contains(path),
+          )) {
+            return handler.next(e); // Salta il refresh per questi endpoint
           }
 
-          print("Error: ${e.message}, Status Code: ${e.response?.statusCode}");
+          debugPrint(
+            "Error: ${e.message}, Status Code: ${e.response?.statusCode}",
+          );
           if (e.response?.statusCode == 401) {
             String? newAccessToken = "";
             try {
               newAccessToken = await _refreshToken();
-            }catch (refreshError) {
-              print("Refresh Token Error: $refreshError");
+            } catch (refreshError) {
+              debugPrint("Refresh Token Error: $refreshError");
               // If refresh fails, log the user out
               // await _storageService.deleteAllTokens();
               await ref.read(authServiceProvider).logout();
@@ -98,32 +106,15 @@ class ApiService {
     return opts;
   }
 
-  // void updateBaseUrl(String newBaseUrl) {
-  //   basicUrl = "http://";
-  //   basicUrl =  basicUrl + newBaseUrl;
-  // }
-
   void updateBaseUrl(String newBaseUrl) {
     String normalized = newBaseUrl;
     if (!normalized.startsWith('http://') &&
         !normalized.startsWith('https://')) {
-      normalized = 'http://' + normalized;
+      normalized = 'https://' + normalized;
     }
     basicUrl = normalized;
-    print('ApiService basicUrl set to: $normalized');
+    debugPrint('ApiService basicUrl set to: $normalized');
   }
-
-  // void updateBaseUrl(String newBaseUrl) {
-  //   // Normalize: ensure scheme present
-  //   String normalized = newBaseUrl;
-  //   if (!normalized.startsWith('http://') &&
-  //       !normalized.startsWith('https://')) {
-  //     normalized = 'https://' + normalized.replaceAll(RegExp(r'^/+'), '');
-  //   }
-  //   basicUrl = normalized;
-  //   _dio.options.baseUrl = normalized;
-  //   print('ApiService baseUrl updated to: $normalized');
-  // }
 
   String getCurrentBaseUrl() {
     return basicUrl;
@@ -151,28 +142,58 @@ class ApiService {
       return newAccessToken;
     } catch (e) {
       // If refresh fails, log the user out
-      print("Refresh Token Error: $e");
+      debugPrint("Refresh Token Error: $e");
       await ref.read(authServiceProvider).logout();
       return null;
     }
   }
 
-  Future<bool> pingServer({Duration timeout = const Duration(seconds: 2), String urlToCheck = centralizedUrl}) async {
+  Future<bool> pingServer({
+    Duration timeout = const Duration(seconds: 2),
+    String urlToCheck = centralizedUrl,
+  }) async {
+    final targetUrl = urlToCheck ?? dio.options.baseUrl;
 
-    final uri = Uri.parse(dio.options.baseUrl);
-    final host = uri.host;
-    final port = uri.hasPort ? uri.port : (uri.scheme == "https" ? 443 : 80);
-
-    print("URI: ${uri}");
-    print("HOST: ${host}");
-    print("PORT: ${port}");
-
-    try {
+    try{
+      final uri = Uri.parse(targetUrl);
+      final host = uri.host;
+      final port = uri.hasPort ? uri.port : (uri.scheme == "https" ? 443 : 80);
+  
+      debugPrint("URI: ${uri}");
+      debugPrint("HOST: ${host}");
+      debugPrint("PORT: ${port}");
+  
       final socket = await Socket.connect(host, port, timeout: timeout);
       socket.destroy();
+      return true;
     } catch (e) {
-      print('Ping failed: $e');
-      return false;
+      debugPrint('Ping failed: $e');
+      // return false;
+    }
+
+    try {
+      final response = await dio.get(
+        "/health_check/",
+        options: _getOptions(
+          baseUrl: urlToCheck,
+          options: Options(
+            sendTimeout: timeout,
+            receiveTimeout: timeout,
+            validateStatus:
+                (status) =>
+                    status != null &&
+                    status < 600, // Accept any status code less than 500
+          ),
+        ),
+      );
+
+      return true;
+    } on DioException catch (e) {
+      if (e.type == DioExceptionType.sendTimeout ||
+          e.type == DioExceptionType.receiveTimeout) {
+        debugPrint('Ping timeout: $e');
+        return false;
+      }
     }
 
     try {
@@ -183,23 +204,24 @@ class ApiService {
           options: Options(
             sendTimeout: timeout,
             receiveTimeout: timeout,
-            validateStatus: (status) => status != null && status < 600, // Accept any status code less than 500
+            validateStatus:
+                (status) =>
+                    status != null &&
+                    status < 600, // Accept any status code less than 500
           ),
         ),
       );
       return true;
-    } on DioException catch(e) {
-      if (e.type == DioExceptionType.sendTimeout || e.type == DioExceptionType.receiveTimeout) {
-        print('Ping timeout: $e');
+    } on DioException catch (e) {
+      if (e.type == DioExceptionType.sendTimeout ||
+          e.type == DioExceptionType.receiveTimeout) {
+        debugPrint('Ping timeout: $e');
         return false;
-      } 
+      }
       return true;
     } catch (_) {
       return false;
     }
-
-
-
   }
 
   Future<Response> getProfileDetails({String? baseUrl}) async {
@@ -210,7 +232,60 @@ class ApiService {
       );
       return response;
     } catch (e) {
-      print('Failed to fetch profile details: $e');
+      debugPrint('Failed to fetch profile details: $e');
+      rethrow;
+    }
+  }
+
+  Future<Response> googleMobileLogin(String idToken, {String? baseUrl}) async {
+    try {
+      final response = await dio.post(
+        '/google-mobile-login/',
+        data: {'id_token': idToken},
+        options: _getOptions(
+          baseUrl: baseUrl ?? getCurrentBaseUrl(),
+          options: Options(
+            followRedirects: false,
+            validateStatus: (status) => status != null && status < 400,
+          ),
+        ),
+      );
+      return response;
+    } catch (e) {
+      debugPrint('Failed Google mobile login: $e');
+      rethrow;
+    }
+  }
+
+  Future<Response> appleMobileLogin({
+    required String identityToken,
+    required String authorizationCode,
+    String? givenName,
+    String? familyName,
+    String? email,
+    String? baseUrl,
+  }) async {
+    try {
+      final response = await dio.post(
+        '/apple-mobile-login/',
+        data: {
+          'identity_token': identityToken,
+          'authorization_code': authorizationCode,
+          'given_name': givenName,
+          'family_name': familyName,
+          'email': email,
+        },
+        options: _getOptions(
+          baseUrl: baseUrl ?? getCurrentBaseUrl(),
+          options: Options(
+            followRedirects: false,
+            validateStatus: (status) => status != null && status < 400,
+          ),
+        ),
+      );
+      return response;
+    } catch (e) {
+      debugPrint('Failed Apple mobile login: $e');
       rethrow;
     }
   }
@@ -221,17 +296,31 @@ class ApiService {
         '/api/token/',
         data: {'email': email, 'password': password},
         options: Options(
-          validateStatus: (status) => status == 200 || status == 401, // Allow 401 for invalid credentials
+          validateStatus:
+              (status) =>
+                  status == 200 ||
+                  status == 401, // Allow 401 for invalid credentials
         ),
+      );
+      debugPrint(
+        'Login response: ${response.statusCode}, data: ${response.data}',
       );
       return response;
     } catch (e) {
-      print('Failed to login: $e');
+      debugPrint('Failed to login: $e');
       rethrow;
     }
   }
 
-  Future<Response> register(String username, String password, String name, String surname, String mail, String description, String city) async {
+  Future<Response> register(
+    String username,
+    String password,
+    String name,
+    String surname,
+    String mail,
+    String description,
+    String city,
+  ) async {
     try {
       final response = await dio.post(
         '/api_register/',
@@ -247,12 +336,17 @@ class ApiService {
       );
       return response;
     } catch (e) {
-      print('Failed to register: $e');
+      debugPrint('Failed to register: $e');
       rethrow;
     }
   }
 
-  Future<Response> updateAccount(String name, String surname, String mail, String description) async {
+  Future<Response> updateAccount(
+    String name,
+    String surname,
+    String mail,
+    String description,
+  ) async {
     try {
       final response = await dio.post(
         '/update_profile/',
@@ -265,24 +359,23 @@ class ApiService {
       );
       return response;
     } catch (e) {
-      print('Failed to update profile: $e');
+      debugPrint('Failed to update profile: $e');
       rethrow;
     }
   }
 
-
-  Future<Response> updatePassword(String oldPassword, String newPassword) async {
+  Future<Response> updatePassword(
+    String oldPassword,
+    String newPassword,
+  ) async {
     try {
       final response = await dio.post(
         '/update_password/',
-        data: {
-          'oldPassword': oldPassword,
-          'newPassword': newPassword,
-        },
+        data: {'oldPassword': oldPassword, 'newPassword': newPassword},
       );
       return response;
     } catch (e) {
-      print('Failed to update password: $e');
+      debugPrint('Failed to update password: $e');
       rethrow;
     }
   }
@@ -291,13 +384,11 @@ class ApiService {
     try {
       final response = await dio.post(
         '/forgot-password/',
-        data: {
-          'email': email,
-        },
+        data: {'email': email},
       );
       return response;
     } catch (e) {
-      print('Failed to reset password: $e');
+      debugPrint('Failed to reset password: $e');
       rethrow;
     }
   }
@@ -306,189 +397,288 @@ class ApiService {
     try {
       final response = await dio.post(
         '/delete_account/',
-        data: {
-          'password': password,
-        },
+        data: {'password': password},
       );
       return response;
     } catch (e) {
-      print('Failed to delete profile: $e');
+      debugPrint('Failed to delete profile: $e');
       rethrow;
     }
   }
+
+  Future<Response> getAllNearbyTours(int timeout, {String? baseUrl, String? language}) async {
+    try {
+      final queryParameters = <String, dynamic>{
+        if (language != null && language.isNotEmpty) 'language': language,
+      };
   
-  Future<Response> getAllNearbyTours(int timeout, {String? baseUrl}) async {
-    try {
-      Response response;
-      if (timeout > 0) {
-        final options = _getOptions(
-          baseUrl: baseUrl,
-          options: Options(sendTimeout: Duration(seconds: timeout)),
-        );
-        response = await dio.get("/tour_list/", options: options);
-      } else {
-        final options = _getOptions(baseUrl: baseUrl);
-        response = await dio.get('/tour_list/', options: options);
-      }
+      final options = timeout > 0
+          ? _getOptions(
+              baseUrl: baseUrl,
+              options: Options(sendTimeout: Duration(seconds: timeout)),
+            )
+          : _getOptions(baseUrl: baseUrl);
+  
+      final response = await dio.get(
+        '/tour_list/',
+        queryParameters: queryParameters,
+        options: options,
+      );
+  
       return response;
     } catch (e) {
-      print('Failed to fetch tours: $e');
+      debugPrint('Failed to fetch tours: $e');
       rethrow;
     }
   }
 
-  Future<Response> getNearbyTours(int timeout, double latitude, double longitude, {String? baseUrl}) async {
+  Future<Response> getNearbyTours(
+    int timeout,
+    double latitude,
+    double longitude, {
+    String? baseUrl,
+    String? language,
+  }) async {
+    // try {
+    //   Response response;
+    //   if (timeout > 0) {
+    //     final options = _getOptions(
+    //       baseUrl: baseUrl,
+    //       options: Options(sendTimeout: Duration(seconds: timeout)),
+    //     );
+    //     response = await dio.get(
+    //       "/tour_list/?lon=$longitude&lat=$latitude&num_tours=5",
+    //       options: options,
+    //     );
+    //   } else {
+    //     final options = _getOptions(baseUrl: baseUrl);
+    //     response = await dio.get(
+    //       '/tour_list/?lon=$longitude&lat=$latitude&num_tours=5',
+    //       options: options,
+    //     );
+    //   }
+    //   return response;
+    // } catch (e) {
+    //   debugPrint('Failed to fetch tours: $e');
+    //   rethrow;
+    // }
     try {
-      Response response;
-      if (timeout > 0) {
-        final options = _getOptions(
-          baseUrl: baseUrl,
-          options: Options(sendTimeout: Duration(seconds: timeout)),
-        );
-        response = await dio.get(
-          "/tour_list/?lon=$longitude&lat=$latitude",
-          options: options,
-        );
-      } else {
-        final options = _getOptions(baseUrl: baseUrl);
-        response = await dio.get('/tour_list/?lon=$longitude&lat=$latitude', options: options);
-      }
+      final queryParameters = <String, dynamic>{
+        'lon': longitude,
+        'lat': latitude,
+        'num_tours': 5,
+        if (language != null && language.isNotEmpty) 'language': language,
+      };
+  
+      final options = timeout > 0
+          ? _getOptions(
+              baseUrl: baseUrl,
+              options: Options(sendTimeout: Duration(seconds: timeout)),
+            )
+          : _getOptions(baseUrl: baseUrl);
+  
+      final response = await dio.get(
+        '/tour_list/',
+        queryParameters: queryParameters,
+        options: options,
+      );
+  
       return response;
     } catch (e) {
-      print('Failed to fetch tours: $e');
+      debugPrint('Failed to fetch tours: $e');
       rethrow;
     }
   }
 
-
-  Future<Response> getTourBySearchTerm(String searchTerm, {String? baseUrl}) async {
+  Future<Response> getTourBySearchTerm(
+    String searchTerm, {
+    String? baseUrl,
+    String? language,
+  }) async {
     try {
-      final response = await dio.get("/tour_list/?searchTerm=$searchTerm", options: _getOptions(baseUrl: baseUrl));
+      final response = await dio.get(
+        '/tour_list/',
+        queryParameters: {
+          'searchTerm': searchTerm,
+          'num_tours': 10,
+          if (language != null && language.isNotEmpty) 'language': language,
+        },
+        options: _getOptions(baseUrl: baseUrl),
+      );
       return response;
     } catch (e) {
-      print('Failed to fetch tours: $e');
+      debugPrint('Failed to fetch tours: $e');
       rethrow;
     }
   }
 
-
-  Future<Response> getTourByCategory(String category, {String? baseUrl}) async {
+  Future<Response> getTourByCategory(String category, {String? baseUrl, String? language}) async {
     try {
-      final response = await dio.get("/tour_list/?category=$category", options: _getOptions(baseUrl: baseUrl));
+      final response = await dio.get(
+        '/tour_list/',
+        queryParameters: {
+          'category': category,
+          'num_tours': 10,
+          if (language != null && language.isNotEmpty) 'language': language,
+        },
+        options: _getOptions(baseUrl: baseUrl),
+      );
       return response;
     } catch (e) {
-      print('Failed to fetch tours: $e');
+      debugPrint('Failed to fetch tours: $e');
       rethrow;
     }
   }
-
 
   Future<Response> getTourDetails(int tourId, {String? baseUrl}) async {
     try {
-      final response = await dio.get('/tour_details/$tourId/', options: _getOptions(baseUrl: baseUrl));
+      final response = await dio.get(
+        '/tour_details/$tourId/',
+        options: _getOptions(baseUrl: baseUrl),
+      );
       return response;
     } catch (e) {
-      print('Failed to fetch tour details: $e');
+      debugPrint('Failed to fetch tour details: $e');
       rethrow;
     }
   }
 
   Future<Response> getTourReviews(int tourId, {String? baseUrl}) async {
     try {
-      final response = await dio.get('/get_reviews_by_tour_id/$tourId/', options: _getOptions(baseUrl: baseUrl));
+      final response = await dio.get(
+        '/get_reviews_by_tour_id/$tourId/',
+        options: _getOptions(baseUrl: baseUrl),
+      );
       return response;
     } catch (e) {
-      print('Failed to fetch tour reviews: $e');
+      debugPrint('Failed to fetch tour reviews: $e');
       rethrow;
     }
   }
 
   Future<Response> getUserReviews({String? baseUrl}) async {
     try {
-      final response = await dio.get('/get_reviews_by_user', options: _getOptions(baseUrl: baseUrl));
+      final response = await dio.get(
+        '/get_reviews_by_user',
+        options: _getOptions(baseUrl: baseUrl),
+      );
       return response;
     } catch (e) {
-      print('Failed to fetch tour reviews: $e');
+      debugPrint('Failed to fetch tour reviews: $e');
       rethrow;
     }
   }
 
-
-
   Future<Response> getTourWaypoints(int tourId, {String? baseUrl}) async {
     try {
-      final response = await dio.get('/tour_waypoints/$tourId', options: _getOptions(baseUrl: baseUrl));
+      final response = await dio.get(
+        '/tour_waypoints/$tourId',
+        options: _getOptions(baseUrl: baseUrl),
+      );
       return response;
     } catch (e) {
-      print('Failed to fetch tour categories: $e');
+      debugPrint('Failed to fetch tour categories: $e');
       rethrow;
     }
   }
 
   Future<Response> incrementTourViews(int waypointId, {String? baseUrl}) async {
     try {
-      final response = await dio.post('/increment_view_count/', options: _getOptions(baseUrl: baseUrl),
-      data: {
-        'tour_id': waypointId,
-      });
+      final response = await dio.post(
+        '/increment_view_count/',
+        options: _getOptions(baseUrl: baseUrl),
+        data: {'tour_id': waypointId},
+      );
       return response;
     } catch (e) {
-      print('Failed to incvrement tour views: $e');
+      debugPrint('Failed to increment tour views: $e');
       rethrow;
     }
   }
 
-  Future<Response> leaveReview(int tourId, double rating, String comment, {String? baseUrl}) async {
+  Future<Response> leaveReview(
+    int tourId,
+    double rating,
+    String comment, {
+    String? baseUrl,
+  }) async {
     try {
-      final response = await dio.post('/create_review/', options: _getOptions(baseUrl: baseUrl),
-      data: {
-        'tour_id': tourId, 
-        'rating': rating, 
-        'comment': comment
-      });
+      final response = await dio.post(
+        '/create_review/',
+        options: _getOptions(baseUrl: baseUrl),
+        data: {'tour_id': tourId, 'rating': rating, 'comment': comment},
+      );
       return response;
     } catch (e) {
-      print('Failed to fetch tour categories: $e');
+      debugPrint('Failed to fetch tour categories: $e');
       rethrow;
     }
   }
 
-  Future<Response> initializeInferenceModule(int tourId, {String? baseUrl}) async {
+  Future<Response> hasReviewedTour(int tourId, {String? baseUrl}) async {
+    return await dio.get(
+      '/has_reviewed_tour/$tourId/',
+      options: _getOptions(baseUrl: baseUrl),
+    );
+  }
+
+  Future<Response> initializeInferenceModule(
+    int tourId, {
+    String? baseUrl,
+  }) async {
     try {
-      final response = await dio.get('/load_model/$tourId', options: _getOptions(baseUrl: baseUrl));
+      final response = await dio.get(
+        '/load_model/$tourId',
+        options: _getOptions(baseUrl: baseUrl),
+      );
       return response;
     } catch (e) {
-      print('Failed to fetch tour categories: $e');
+      debugPrint('Failed to fetch tour categories: $e');
       rethrow;
     }
   }
 
-  Future<Response> inference(String imageBase64, int tourId, {String? baseUrl}) async {
+  Future<Response> inference(
+    Uint8List imageBytes,
+    int tourId,
+    double? gpsLat,
+    double? gpsLon,
+    double? gpsAccuracyM, {
+    String? baseUrl,
+  }) async {
     try {
       final formData = FormData.fromMap({
-        'img': imageBase64,
+        'img': MultipartFile.fromBytes(imageBytes, filename: 'query.jpg'),
         'tour_id': tourId,
+        if (gpsLat != null) 'gps_lat': gpsLat,
+        if (gpsLon != null) 'gps_lon': gpsLon,
+        if (gpsAccuracyM != null) 'gps_accuracy_m': gpsAccuracyM,
       });
 
-      var results_data = {};
-      final response = await dio.post('/inference/', data: formData, options: _getOptions(baseUrl: baseUrl));
-      // if (response.data.get("result") == -1) {
-      //   results_data["result"] = -1;
-      //   results_data["available_resources"] = response.data.get("available_resources");
-      // } else {
-      //   return response.data["result"];
-      // }
+      final response = await dio.post(
+        '/inference/',
+        data: formData,
+        options: _getOptions(baseUrl: baseUrl),
+      );
+
       return response;
     } catch (e) {
-      print('Failed inference: $e');
+      debugPrint('Failed inference: $e');
       rethrow;
     }
   }
-    
-    Future<Response> loadResource(int waypointId, String resourceType, {String? baseUrl}) async {
-    print("Loading resource type: $resourceType for waypoint ID: $waypointId from baseUrl: $baseUrl");
+
+  Future<Response> loadResource(
+    int waypointId,
+    String resourceType, {
+    String? baseUrl,
+  }) async {
+    debugPrint(
+      "Loading resource type: $resourceType for waypoint ID: $waypointId from baseUrl: $baseUrl",
+    );
     try {
-      final response = await dio.get('/get_waypoint_resources/',
+      final response = await dio.get(
+        '/get_waypoint_resources/',
         queryParameters: {
           'waypoint_id': waypointId,
           'resource_type': resourceType,
@@ -497,21 +687,44 @@ class ApiService {
       );
       return response;
     } catch (e) {
-      print('Failed to fetch tour resources: $e');
+      debugPrint('Failed to fetch tour resources: $e');
       rethrow;
     }
   }
 
-  Future<Response> getServersList(){
+  Future<Response> getServersList() {
     try {
       final response = dio.get("/get_services/");
       return response;
     } catch (e) {
-      print('Failed to fetch servers list: $e');
+      debugPrint('Failed to fetch servers list: $e');
       rethrow;
     }
   }
 
+  Future<Response> sendReport(int tourId, {String? baseUrl}) async {
+    try {
+      final response = dio.post(
+        "/increment-reports/",
+        data: {'tour_id': tourId},
+        options: _getOptions(baseUrl: baseUrl),
+      );
+      return response;
+    } catch (e) {
+      debugPrint('Failed to send report: $e');
+      rethrow;
+    }
+  }
 
-
+  Future<Response> downloadOfflineBundle(
+    int tourId,
+    String savePath, {
+    String? baseUrl,
+  }) async {
+    return dio.download(
+      '/download_offline_bundle/$tourId/',
+      savePath,
+      options: _getOptions(baseUrl: baseUrl),
+    );
+  }
 }

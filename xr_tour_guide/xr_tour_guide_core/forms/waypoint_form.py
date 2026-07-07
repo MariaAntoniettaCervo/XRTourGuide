@@ -30,6 +30,8 @@ class MultipleClearableFileInput(ClearableFileInput):
 
 class WaypointForm(forms.ModelForm):
     
+    position = forms.IntegerField(required=False, widget=forms.HiddenInput())
+    
     uploaded_images = forms.FileField(
         required=False,
         label=_('📷 Add Images'),
@@ -192,4 +194,5 @@ class WaypointForm(forms.ModelForm):
 
     class Meta:
         model = Waypoint
-        fields = ['title', 'place', 'coordinates', 'description', 'pdf_item', 'video_item', 'audio_item']
+        fields = ['title', 'place', 'coordinates', 'description', 'pdf_item', 'video_item', 'audio_item', 'position']
+        widgets = { 'position': forms.HiddenInput() }

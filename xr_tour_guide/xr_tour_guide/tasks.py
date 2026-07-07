@@ -37,6 +37,7 @@ def call_api_and_save(self, tour_id):
             raise self.retry(exc=lock_error, countdown=10)
         
         print("Lock acquisito, procedo con la build...")
+        waypoints_gps = []
         try:
             storage = MinioStorage()
             if not storage.exists(f"{tour.pk}/data/"):
@@ -44,7 +45,7 @@ def call_api_and_save(self, tour_id):
                 storage.save(f"{tour.pk}/data/test/.keep", ContentFile(b""))
                 
             for subtours in tour.sub_tours.all():
-                waipoints = subtours.waypoints.all()
+                waipoints = subtours.waypoints.filter(is_preliminary_info=False)
                 for waypoint in waipoints:
                     num_img = len(waypoint.images.filter(type_of_images=TypeOfImage.DEFAULT.value))
                     if num_img < 5:
@@ -59,8 +60,19 @@ def call_api_and_save(self, tour_id):
                             storage.save(f"{tour.pk}/data/train/{waypoint.title}/{image.image.name.split('/')[-1]}", image.image)
                         for image in waypoint.images.filter(type_of_images=TypeOfImage.DEFAULT.value)[train:]:
                             storage.save(f"{tour.pk}/data/test/{waypoint.title}/{image.image.name.split('/')[-1]}", image.image)
+                        
+                    lat = float(waypoint.coordinates.split(",")[0].strip()) if waypoint.coordinates else None
+                    lon = float(waypoint.coordinates.split(",")[1].strip()) if waypoint.coordinates else None
+                    if lat is not None and lon is not None:
+                        gps_info = {
+                            "name": waypoint.title,
+                            "lat": lat,
+                            "lon": lon,
+                            "radius_m": 65
+                        }
+                        waypoints_gps.append(gps_info)
                             
-            waypoints = tour.waypoints.all()
+            waypoints = tour.waypoints.filter(is_preliminary_info=False)
             for waypoint in waypoints:
                 images = waypoint.images.filter(type_of_images=TypeOfImage.DEFAULT.value)
                 num_img = len(images)
@@ -77,6 +89,19 @@ def call_api_and_save(self, tour_id):
                     for image in images[train:]:
                         storage.save(f"{tour.pk}/data/test/{waypoint.title}/{image.image.name.split("/")[-1]}", image.image)
                         
+                #GPS COORD
+                if waypoint.coordinates is not None:
+                    coord = waypoint.coordinates
+                    lat = float(coord.split(",")[0].strip())
+                    lon = float(coord.split(",")[1].strip())
+                    gps_info = {
+                        "name": waypoint.title,
+                        "lat": lat,
+                        "lon": lon,
+                        "radius_m": 65
+                    }
+                    waypoints_gps.append(gps_info)
+                        
         except Exception as e:
             print(f"Errore nella creazione delle cartelle per il train e test: {e}")
         try:
@@ -84,6 +109,9 @@ def call_api_and_save(self, tour_id):
                 "poi_name": tour.title,
                 "poi_id": str(tour.id),
                 "data_url": f"{tour_id}",
+                "waypoint_gps": {
+                    "waypoints": waypoints_gps
+                }
             }
 
             try:
@@ -92,7 +120,7 @@ def call_api_and_save(self, tour_id):
                 response = requests.post(url, headers=headers, json=payload, verify=False)
             except Exception as e:  
                 print(f"Errore nella chiamata API: {e}")
-                               
+                
             print("Response status code:", response.status_code)
             print(response)
             
@@ -172,8 +200,15 @@ def fail_stuck_builds():
             
     cromo_poi = None
     try:
-        timeout_minutes = 10 #18 * 60 # 18 hours
-        threshold = timezone.now() - timedelta(minutes=1)
+        # timeout_minutes = 10 #18 * 60 # 18 hours
+        # threshold = timezone.now() - timedelta(minutes=1)
+        try:
+            configured_timeout = int(os.getenv("BUILD_TIMEOUT_MINUTES", 30))
+        except ValueError:
+            configured_timeout = 30
+        
+        timeout_minutes = max(1, min(configured_timeout, 45))
+        threshold = timezone.now() - timedelta(minutes=timeout_minutes)
 
         cromo_poi = Tour.objects.filter(status=Status.BUILDING, build_started_at__lt=threshold).first()
     except Tour.DoesNotExist:
@@ -218,3 +253,52 @@ def remove_sub_tours():
     tours = Tour.objects.filter(is_subtour=True, parent_tours__isnull=True, created_at__lt=difference)
     for tour in tours:
         tour.delete()
+        
+@shared_task
+def clear_ai_inference_cache():
+    url = os.getenv("INFERENCE_CACHE_CLEAR_ENDPOINT")
+    
+    if not url:
+        print("INFERENCE_CACHE_CLEAR_ENDPOINT non è configurato.")
+        return "INFERENCE_CACHE_CLEAR_ENDPOINT non configurato"
+    
+    headers = {}
+    
+    try:
+        response = requests.post(url, timeout=30)
+        print(f"Cache clear response: {response.status_code} - {response.text}")
+        response.raise_for_status()
+        return response.json()
+    except Exception as e:
+        print(f"Error clearing AI inference cache: {e}", flush=True)
+        raise
+    
+@shared_task(queue='api_tasks')
+def generate_offline_bundle(tour_id):
+    from xr_tour_guide_core.services.offline_bundle_service import OfflineBundleService
+    from xr_tour_guide_core.models import Tour, Status
+
+    try:
+        service = OfflineBundleService()
+        result = service.build_offline_bundle(tour_id)
+        try:
+            tour = Tour.objects.get(pk=tour_id)
+            if tour.status == Status.ENQUEUED:
+                tour.status = Status.BUILT
+                tour.save(update_fields=["status"])
+        except Tour.DoesNotExist:
+            pass
+        
+        print(f"Offline bundle generated: {result}")
+        return result
+    except Exception as e:
+        try:
+            tour = Tour.objects.get(pk=tour_id)
+            if tour.status == Status.ENQUEUED:
+                tour.status = Status.FAILED
+                tour.save(update_fields=["status"])
+        except Exception:
+            pass
+        
+        print(f"Offline bundle generation failed for tour {tour_id}: {e}")
+        return {"ok": False, "error": str(e)}

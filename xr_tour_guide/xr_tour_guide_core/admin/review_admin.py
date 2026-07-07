@@ -26,7 +26,16 @@ class ReviewAdmin(ModelAdmin):
         return False
     
     def has_delete_permission(self, request, obj=None):
-        return False
+        has_permission = super().has_delete_permission(request, obj)
+        if not has_permission:
+            return False
+        if obj is None:
+            return True
+        if obj.tour.status in ['SERVING', 'BUILDING', 'ENQUEUED']:
+            return False
+        if not request.user.is_superuser and obj.user != request.user:
+            return False
+        return True
     
     def has_add_permission(self, request, obj=None):
         return False

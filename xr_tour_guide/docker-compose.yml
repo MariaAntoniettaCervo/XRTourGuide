@@ -18,8 +18,7 @@ services:
     volumes:
       - mysql_data_xr_tour_guide:/var/lib/mysql
     networks:
-      backend_net:
-        ipv4_address: 172.28.0.30
+      - backend_net
 
   web:
     build: .
@@ -80,8 +79,6 @@ services:
     container_name: redis_tour_guide
     env_file:
       - .env
-    ports:
-      - "6379:6379"
     networks:
     - backend_net
 
@@ -137,8 +134,9 @@ services:
       - backend_net
     
   ai_training:
-    # image: cromo_ai_classification:training
-    build: ../AI_classification/training
+    build: 
+      context: ../AI_classification
+      dockerfile: training/Dockerfile
     container_name: ai_training_tour_guide
     environment:
       - PYTHONUNBUFFERED=1
@@ -149,11 +147,12 @@ services:
     ports:
       - "8090:8090"
     networks:
-      backend_net:
-        ipv4_address: 172.28.0.20
+     - backend_net
 
   ai_inference:
-    build: ../AI_classification/inference
+    build:
+      context: ../AI_classification
+      dockerfile: inference/Dockerfile
     container_name: ai_inference_tour_guide
     environment:
       - PYTHONUNBUFFERED=1

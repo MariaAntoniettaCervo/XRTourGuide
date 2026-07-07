@@ -2,6 +2,8 @@
 {% load static %}
 {% load i18n %}
 {% block public_content %}
+{% block title %}{% trans "Register - XRTourGuide" %}{% endblock %}
+
 
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700;900&family=DM+Sans:wght@400;500;600;700&display=swap');
@@ -681,7 +683,8 @@ const translations = {
     verificationSent: "{% trans 'Verification email sent successfully!' %}",
     emailNotFound: "{% trans 'Email not found' %}",
     emailAlreadyVerified: "{% trans 'Email already verified' %}",
-    sendError: "{% trans 'Error sending email' %}"
+    sendError: "{% trans 'Error sending email' %}",
+    tooManyRequests: "{% trans 'Too many requests. Please wait before trying again.' %}"
 };
 
 function togglePassword() {
@@ -737,13 +740,27 @@ document.getElementById("register-form").addEventListener("submit", async functi
         let errorMessage = "";
 
         if (response.ok) { // 200-299
-            messageBox.textContent = translations.emailSent;
+            let successMessage = translations.emailSent;
+            try {
+                const successData = await response.json();
+                if (successData && successData.message) {
+                    successMessage = successData.message;
+                }
+            } catch (parseError) {
+                console.log("Unable to parse success payload", parseError);
+            }
+            messageBox.textContent = successMessage;
             messageBox.classList.add("text-success");
             messageBox.style.display = "block";
 
-            setTimeout(() => {
-                window.location.href = "{% url 'login' %}";
-            }, 2000);
+            if (response.status === 201) {
+                setTimeout(() => {
+                    window.location.href = "{% url 'login' %}";
+                }, 2000);
+            } else {
+                submitBtn.disabled = false;
+                btnText.textContent = translations.register;
+            }
         } else {
             let errorData;
             const contentType = response.headers.get("content-type");
@@ -846,6 +863,13 @@ document.getElementById("resend-verification-form").addEventListener("submit", a
                 errorMessage = translations.emailNotFound;
             } else if (response.status === 400) {
                 errorMessage = translations.emailAlreadyVerified;
+            } else if (response.status === 429) {
+                try {
+                    const payload = JSON.parse(responseText);
+                    errorMessage = payload.detail || translations.tooManyRequests;
+                } catch (parseError) {
+                    errorMessage = responseText || translations.tooManyRequests;
+                }
             } else {
                 errorMessage = responseText || translations.sendError;
             }

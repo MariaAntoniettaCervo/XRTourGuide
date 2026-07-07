@@ -30,6 +30,7 @@ pip install django python-docx piper-tts[all]
 - `django` - Web framework (required by XRTourGuide backend)
 - `python-docx` - Read and extract text from Microsoft Word documents
 - `piper-tts[all]` - Text-to-speech engine with all language support
+- `pathvalidate`
 
 ---
 

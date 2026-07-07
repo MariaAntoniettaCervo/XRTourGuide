@@ -1,31 +1,112 @@
-django
-django-unfold
-dotenv
-gunicorn
-mysqlclient
-whitenoise
-pillow
-django-storages
-boto3
-minio
-celery
-redis
-requests
-certifi
-pip-system-certs
-django-jsonform
-# django-map-widgets
-django-location-field
-djangorestframework
-djangorestframework-simplejwt
-drf-yasg
-django-nested-admin
-django-redis
-django-celery-beat
-django-multiupload
-django-allauth
-cryptography
-polib
+# django
+# django-unfold
+# dotenv
+# gunicorn
+# mysqlclient
+# whitenoise
+# pillow
+# django-storages
+# boto3
+# minio
+# celery
+# redis
+# requests
+# certifi
+# pip-system-certs
+# django-jsonform
+# # django-map-widgets
+# django-location-field
+# djangorestframework
+# djangorestframework-simplejwt
+# drf-yasg
+# django-nested-admin
+# django-redis
+# django-celery-beat
+# django-multiupload
+# django-allauth
+# cryptography
+# polib
+# googletrans==4.0.0rc1
+# django-cors-headers
+# user_agent
+
+
+amqp==5.3.1
+argon2-cffi==25.1.0
+argon2-cffi-bindings==25.1.0
+asgiref==3.11.1
+billiard==4.2.4
+boto3==1.42.94
+botocore==1.42.94
+celery==5.6.3
+certifi==2026.4.22
+cffi==2.0.0
+chardet==3.0.4
+charset-normalizer==3.4.7
+click==8.3.3
+click-didyoumean==0.3.1
+click-plugins==1.1.1.2
+click-repl==0.3.0
+cron-descriptor==1.4.5
+cryptography==46.0.7
+Django==6.0.4
+django-allauth==65.16.1
+django-celery-beat==2.9.0
+django-cors-headers==4.9.0
+django-jsonform==2.23.2
+django-location-field==2.7.3
+django-multiupload==0.6.1
+django-nested-admin==4.1.6
+django-redis==6.0.0
+django-storages==1.14.6
+django-timezone-field==7.2.1
+django-unfold==0.90.0
+djangorestframework==3.17.1
+djangorestframework_simplejwt==5.5.1
+dotenv==0.9.9
+drf-yasg==1.21.15
 googletrans==4.0.0rc1
-django-cors-headers
-user_agent
+gunicorn==25.3.0
+h11==0.9.0
+h2==3.2.0
+hpack==3.0.0
+hstspreload==2025.1.1
+httpcore==0.9.1
+httpx==0.13.3
+hyperframe==5.2.0
+idna==2.10
+inflection==0.5.1
+jmespath==1.1.0
+kombu==5.6.2
+minio==7.2.20
+mysqlclient==2.2.8
+packaging==26.1
+pillow==12.2.0
+pip_system_certs==5.3
+polib==1.2.0
+prompt_toolkit==3.0.52
+pycparser==3.0
+pycryptodome==3.23.0
+PyJWT==2.12.1
+python-crontab==3.3.0
+python-dateutil==2.9.0.post0
+python-dotenv==1.2.2
+python-monkey-business==1.1.0
+pytz==2026.1.post1
+PyYAML==6.0.3
+redis==7.4.0
+requests==2.33.1
+rfc3986==1.5.0
+s3transfer==0.16.1
+six==1.17.0
+sniffio==1.3.1
+sqlparse==0.5.5
+typing_extensions==4.15.0
+tzdata==2026.1
+tzlocal==5.3.1
+uritemplate==4.2.0
+urllib3==2.6.3
+user_agent==0.1.14
+vine==5.1.0
+wcwidth==0.6.0
+whitenoise==6.12.0

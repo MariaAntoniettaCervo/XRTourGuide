@@ -1,0 +1,125 @@
+{% extends "admin/base_site.html" %}
+{% load i18n static %}
+
+{% block bodyclass %}{{ block.super }} app-xr_tour_guide_core model-tour import-tour{% endblock %}
+
+{% block extrahead %}
+    {{ block.super }}
+    <link rel="preload" as="image" href="{% static 'admin/img/XRTOURGUIDE.png' %}?v=3">
+    <link rel="icon" type="image/png" href="{% static 'admin/img/XRTOURGUIDE.png' %}?v=4">
+    <link rel="shortcut icon" href="{% static 'admin/img/XRTOURGUIDE.png' %}?v=4">
+    <link rel="apple-touch-icon" href="{% static 'admin/img/XRTOURGUIDE.png' %}?v=4">
+    <link rel="stylesheet" href="{% static 'admin/css/xrtourguide-brand.css' %}">
+    <script>
+        window.XRLoaderConfig = {
+            logoUrl: "{% static 'admin/img/XRTOURGUIDE.png' %}?v=3"
+        };
+    </script>
+    <script src="{% static 'admin/js/loader.js' %}?v=3"></script>
+{% endblock %}
+
+{% block content %}
+<img id="xr-preloaded-loader-logo" src="{% static 'admin/img/XRTOURGUIDE.png' %}?v=3" alt="" aria-hidden="true"
+    style="position:fixed;left:-9999px;top:-9999px;width:1px;height:1px;opacity:0;pointer-events:none;" />
+<div id="content-main">
+    <div class="mx-auto max-w-3xl">
+        <div class="flex flex-col gap-6">
+
+            <div
+                class="rounded-default border border-base-200 bg-white px-6 py-5 shadow-xs dark:border-base-700 dark:bg-base-900">
+                <div class="flex flex-col gap-2">
+                    <h1 class="text-2xl font-semibold text-font-important dark:text-font-important">
+                        {% trans "Import Tour" %}
+                    </h1>
+                    <p class="text-sm text-font-subtle dark:text-font-subtle">
+                        {% trans "Upload a ZIP archive previously exported from XR Tour Guide." %}
+                    </p>
+                </div>
+            </div>
+
+            <div
+                class="rounded-default border border-base-700 bg-base-900/80 px-5 py-4 text-sm text-font-default shadow-xs">
+                <div class="font-medium mb-1">{% trans "How it works" %}</div>
+                <ul class="list-disc pl-5 space-y-1">
+                    <li>{% trans "Select a .zip archive exported from the platform." %}</li>
+                    <li>{% trans "The tour will be imported with all included waypoints and resources." %}</li>
+                    <li>{% trans "If copy mode is enabled, the imported tour title will be made safe automatically." %}
+                    </li>
+                </ul>
+            </div>
+
+            <form method="post" enctype="multipart/form-data" class="flex flex-col gap-6" data-loader-text="Importing tour..." data-loader-subtext="Uploading archive and recreating tour resources." data-loader-keep-visible="true">
+                {% csrf_token %}
+
+                {% if form.non_field_errors %}
+                <div
+                    class="rounded-default bg-red-100 px-3 py-2.5 text-sm text-red-700 dark:bg-red-500/20 dark:text-red-400">
+                    {{ form.non_field_errors }}
+                </div>
+                {% endif %}
+
+                <div
+                    class="rounded-default border border-base-200 bg-white px-6 py-5 shadow-xs dark:border-base-700 dark:bg-base-900">
+                    <div class="grid gap-6">
+
+                        <div class="flex flex-col gap-2">
+                            <label for="{{ form.archive.id_for_label }}"
+                                class="text-sm font-medium text-font-important dark:text-font-important">
+                                {{ form.archive.label }}
+                            </label>
+                            {{ form.archive }}
+                            {% if form.archive.help_text %}
+                            <p class="text-xs text-font-subtle dark:text-font-subtle">
+                                {{ form.archive.help_text }}
+                            </p>
+                            {% endif %}
+                            {% if form.archive.errors %}
+                            <div class="text-sm text-red-600 dark:text-red-400">
+                                {{ form.archive.errors }}
+                            </div>
+                            {% endif %}
+                        </div>
+
+                        <div
+                            class="flex items-start gap-3 rounded-default border border-base-700 bg-base-900/80 px-4 py-4">
+                            <div class="pt-0.5">
+                                {{ form.create_copy }}
+                            </div>
+                            <div class="flex flex-col gap-1">
+                                <label for="{{ form.create_copy.id_for_label }}"
+                                    class="text-sm font-medium text-font-important dark:text-font-important">
+                                    {{ form.create_copy.label }}
+                                </label>
+                                {% if form.create_copy.help_text %}
+                                <p class="text-xs text-font-subtle dark:text-font-subtle">
+                                    {{ form.create_copy.help_text }}
+                                </p>
+                                {% endif %}
+                                {% if form.create_copy.errors %}
+                                <div class="text-sm text-red-600 dark:text-red-400">
+                                    {{ form.create_copy.errors }}
+                                </div>
+                                {% endif %}
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+
+                <div class="flex items-center gap-3">
+                    <button type="submit"
+                        class="inline-flex items-center justify-center rounded-default bg-primary-600 px-4 py-2 text-sm font-medium text-white shadow-xs transition hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 dark:focus:ring-offset-base-900">
+                        ⬆ {% trans "Import tour" %}
+                    </button>
+
+                    <a href="{% url 'admin:xr_tour_guide_core_tour_changelist' %}"
+                        class="inline-flex items-center justify-center rounded-default border border-base-200 bg-white px-4 py-2 text-sm font-medium text-font-default shadow-xs transition hover:bg-base-50 dark:border-base-700 dark:bg-base-900 dark:text-font-important dark:hover:bg-base-800">
+                        {% trans "Back to tours" %}
+                    </a>
+                </div>
+            </form>
+
+        </div>
+    </div>
+</div>
+{% endblock %}

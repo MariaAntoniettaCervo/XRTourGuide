@@ -17,6 +17,8 @@ from django.conf import settings
 from ..authentication import JWTFastAPIAuthentication
 from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi
+from xr_tour_guide.tasks import generate_offline_bundle
+
 
 redis_client = redis.StrictRedis.from_url(os.getenv("REDIS_URL", "redis://redis:6379"))
 
@@ -35,7 +37,11 @@ def build(request):
     if tour.status == "READY":
         tour.status = "ENQUEUED"
         tour.save()
-        call_api_and_save.apply_async(args=[tour.id], queue='api_tasks')
+        
+        if tour.category == "GUIDE":
+            generate_offline_bundle.delay(tour.id)
+        else:
+            call_api_and_save.apply_async(args=[tour.id], queue='api_tasks')
     else:
         return JsonResponse({"message": "Tour already built"}, status=400)
     return redirect(settings.LOGIN_REDIRECT_URL)
@@ -45,13 +51,14 @@ def build(request):
     operation_summary="Complete the build process for a tour",
     request_body=openapi.Schema(
         type=openapi.TYPE_OBJECT,
-        required=['poi_name', 'poi_id', 'model_url', 'status'],
+        required=['poi_name', 'poi_id', 'index_url', 'status'],
         properties={
             'poi_name': openapi.Schema(type=openapi.TYPE_STRING, description='Name of the POI/tour'),
             'poi_id': openapi.Schema(type=openapi.TYPE_INTEGER, description='ID of the POI/tour'),
-            'model_url': openapi.Schema(type=openapi.TYPE_STRING, description='URL of the model'),
+            'index_url': openapi.Schema(type=openapi.TYPE_STRING, description='URL of the JSON index'),
+            'model_url': openapi.Schema(type=openapi.TYPE_STRING, description='Legacy URL of the PyTorch model', nullable=True),
             'status': openapi.Schema(type=openapi.TYPE_STRING, description='Build status (COMPLETED or FAILED)'),
-        },
+        }
     ),
     responses={
         200: openapi.Response(description="Build completed successfully"),
@@ -66,6 +73,7 @@ def complete_build(request):
     storage = MinioStorage()
     tour_title = request.data.get('poi_name')
     tour_id = request.data.get('poi_id')
+    index_url = request.data.get('index_url')
     model_url = request.data.get('model_url')
     status = request.data.get('status')
 
@@ -74,21 +82,26 @@ def complete_build(request):
     if status == "COMPLETED":
         try:
             tour = Tour.objects.get(pk=int(tour_id))
-            tour.model_path = model_url
+            tour.model_path = index_url
             tour.status = "BUILT"
             tour.save()
+            generate_offline_bundle.delay(tour.id)
         except Tour.DoesNotExist:
             return JsonResponse({"error": "POI not found"}, status=404)
         except Exception as e:
             return JsonResponse({"error": f"Error saving POI: {str(e)}"}, status=500)
 
-        send_mail(
-            'Build completata',
-            f"Lezione {tour.title} buildata.",
-            os.environ.get('EMAIL_HOST_USER'),
-            [tour.user.email],
-            fail_silently=False,
-        )
+        try:
+            if tour.user and tour.user.email:
+                send_mail(
+                    'Build completata',
+                    f"Lezione {tour.title} buildata.",
+                    os.environ.get('EMAIL_HOST_USER'),
+                    [tour.user.email],
+                    fail_silently=True,
+                )
+        except Exception as e:
+            print(f"Errore nell'invio dell'email: {e}")
 
         try:
             redis_client.delete("build_lock")
@@ -111,13 +124,17 @@ def complete_build(request):
         tour.status = "FAILED"
         tour.save()
 
-        send_mail(
-            'Build fallita',
-            f"Build Fallita {tour.title}.",
-            os.environ.get('EMAIL_HOST_USER'),
-            [tour.user.email],
-            fail_silently=False,
-        )
+        try:
+            if tour.user and tour.user.email:
+                send_mail(
+                    'Build fallita',
+                    f"Build Fallita {tour.title}.",
+                    os.environ.get('EMAIL_HOST_USER'),
+                    [tour.user.email],
+                    fail_silently=True,
+                )
+        except Exception as e:
+            print(f"Errore nell'invio dell'email: {e}")
 
         try:
             redis_client.delete("build_lock")
@@ -153,11 +170,11 @@ def load_model(request, tour_id):
         return JsonResponse({"error": "POI not found"}, status=404)
     storage = MinioStorage()
     if storage.exists(
-        f"{tour_id}/model.pt"
+        f"{tour_id}/training_data.json"
     ):
-        model_file = storage.open(f"/{tour_id}/model.pt")
+        model_file = storage.open(f"/{tour_id}/training_data.json")
         os.makedirs("models", exist_ok=True)
-        with open(f"models/model_{tour_id}.pt", "wb") as f:
+        with open(f"models/training_data_{tour_id}.json", "wb") as f:
             for chunk in model_file.chunks():
                 f.write(chunk)
     else:
@@ -204,18 +221,61 @@ def inference(request):
     except Tour.DoesNotExist:
         return JsonResponse({"error": "POI not found"}, status=404)
 
+    # payload = {
+    #     "poi_id": str(tour_id),
+    #     "poi_name": tour.title,
+    #     "inference_image": request.data.get('img'),
+    #     "model_url": f"{tour.pk}/training_data.json",
+    #     "index_url": f"{tour.pk}/training_data.json",
+    #     "gps_lat": request.data.get('gps_lat'),
+    #     "gps_lon": request.data.get('gps_lon'),
+    #     "gps_accuracy_m": request.data.get('gps_accuracy_m'),
+    # }
+    # url = os.getenv("INFERENCE_ENDPOINT")
+    # headers = {"Content-type": "application/json"}
+    # response = requests.post(url, headers=headers, json=payload)
+    
     payload = {
         "poi_id": str(tour_id),
-        "inference_image": request.data.get('img'),
-        "model_url": f"{tour.pk}/model.pt",
         "poi_name": tour.title,
+        "model_url": f"{tour.pk}/training_data.json",
+        "index_url": f"{tour.pk}/training_data.json",
+        "gps_lat": request.data.get("gps_lat"),
+        "gps_lon": request.data.get("gps_lon"),
+        "gps_accuracy_m": request.data.get("gps_accuracy_m"),
     }
+
     url = os.getenv("INFERENCE_ENDPOINT")
-    headers = {"Content-type": "application/json"}
-    response = requests.post(url, headers=headers, json=payload)
+
+    uploaded_file = request.FILES.get("img") or request.FILES.get("image")
+
+    if uploaded_file is not None:
+        files = {
+            "image": (
+                uploaded_file.name or "query.jpg",
+                uploaded_file.read(),
+                uploaded_file.content_type or "image/jpeg",
+            )
+        }
+
+        response = requests.post(
+            url,
+            data=payload,
+            files=files,
+            timeout=60,
+        )
+    else:
+        payload["inference_image"] = request.data.get("img")
+
+        response = requests.post(
+            url,
+            headers={"Content-type": "application/json"},
+            json=payload,
+            timeout=60,
+        )
 
     result = response.json()
-    print(f"RESPONSE: {result.get("message")}", flush=True)
+    print(f"RESPONSE: {result.get('message')}", flush=True)
 
     print("INFERENCE DONE", flush=True)
     
@@ -233,12 +293,12 @@ def inference(request):
         }
         return JsonResponse(response_data, status=200)
     
-    waypoint = tour.waypoints.filter(title=result.get("message")).first()
+    waypoint = tour.waypoints.filter(title=result.get("message"), is_preliminary_info=False).first()
 
     
     if waypoint is None:
         for sub_tour in tour.sub_tours.all():
-            waypoint = sub_tour.waypoints.filter(title=result.get("message")).first()
+            waypoint = sub_tour.waypoints.filter(title=result.get("message"), is_preliminary_info=False).first()
             if waypoint:
                 break
 

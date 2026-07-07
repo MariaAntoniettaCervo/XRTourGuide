@@ -9,6 +9,17 @@ from dotenv import load_dotenv
 load_dotenv()
 User = get_user_model()
 
+def get_community_server_base_url():
+    configured_url = os.getenv("COMMUNITY_SERVER_URL", "").strip()
+    if configured_url:
+        return configured_url.rstrip("/")
+
+    legacy_value = os.getenv("COMMUNITY_SERVER", "").strip()
+    if legacy_value.startswith(("http://", "https://")):
+        return legacy_value.rstrip("/")
+
+    return f"http://{legacy_value}".rstrip("/")
+
 class JWTFastAPIAuthentication(BaseAuthentication):
     def authenticate(self, request):
         auth_header = request.headers.get('Authorization')
@@ -22,7 +33,8 @@ class JWTFastAPIAuthentication(BaseAuthentication):
 
         try:
             response = requests.post(
-                f"http://{os.getenv('COMMUNITY_SERVER')}/api/verify/",
+                # f"http://{os.getenv('COMMUNITY_SERVER')}/api/verify/",
+                f"{get_community_server_base_url()}/api/verify/",
                 data={"token": token},
                 headers={
                     "x-api-key": os.getenv('IDP_API_KEY'),

@@ -1,0 +1,28 @@
+{% extends "admin/change_list.html" %}
+{% load i18n static %}
+
+{% block extrahead %}
+{{ block.super }}
+<link rel="preload" as="image" href="{% static 'admin/img/XRTOURGUIDE.png' %}?v=3">
+<link rel="icon" type="image/png" href="{% static 'admin/img/XRTOURGUIDE.png' %}?v=4">
+<link rel="shortcut icon" href="{% static 'admin/img/XRTOURGUIDE.png' %}?v=4">
+<link rel="apple-touch-icon" href="{% static 'admin/img/XRTOURGUIDE.png' %}?v=4">
+<link rel="stylesheet" href="{% static 'admin/css/xrtourguide-brand.css' %}">
+<script>
+    window.XRLoaderConfig = {
+        logoUrl: "{% static 'admin/img/XRTOURGUIDE.png' %}?v=3"
+    };
+</script>
+<script src="{% static 'admin/js/loader.js' %}?v=3"></script>
+{% endblock %}
+
+{% block object-tools-items %}
+<li>
+    <a href="{% url 'admin:xr_tour_guide_core_tour_import' %}" data-loader-link="true"
+        data-loader-text="Opening import..." data-loader-subtext="Preparing import page." data-loader-keep-visible="true"
+        style="background:#059669;color:white;border-radius:6px;padding:8px 12px;text-decoration:none;">
+        ⬆ {% trans "Import tour" %}
+    </a>
+</li>
+{{ block.super }}
+{% endblock %}

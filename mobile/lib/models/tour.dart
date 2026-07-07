@@ -4,6 +4,7 @@ class Tour {
   final String description;
   final String imagePath;
   final String category;
+  final String language;
   final double rating;
   final int reviewCount;
   // final List<String> images;
@@ -13,6 +14,7 @@ class Tour {
   final String creator;
   final String lastEdited;
   final int totViews;
+  final String status;
 
   Tour({
     required this.id,
@@ -20,6 +22,7 @@ class Tour {
     required this.description,
     required this.imagePath,
     required this.category,
+    required this.language,
     required this.rating,
     required this.reviewCount,
     // required this.images,
@@ -29,6 +32,7 @@ class Tour {
     required this.creator,
     required this.lastEdited,
     required this.totViews,
+    required this.status,
   });
 
   factory Tour.fromJson(Map<String, dynamic> json) {
@@ -38,6 +42,7 @@ class Tour {
       description: json['description'] as String,
       imagePath: json['default_img'] as String,
       category: json['category'] as String,
+      language: json['language'] as String,
       rating: (json['rating'] as num).toDouble(),
       reviewCount: json['rating_counter'] as int,
       // images: List<String>.from(json['images'] as List),
@@ -47,6 +52,7 @@ class Tour {
       creator: json['user_name'] as String,
       lastEdited: json['l_edited'] as String, //da rivedere
       totViews: json['tot_view'] as int,
+      status: json['status'] as String,
     );
   }
 
@@ -57,6 +63,7 @@ class Tour {
       'description': description,
       'default_img': imagePath,
       'category': category,
+      'language': language,
       'rating': rating,
       'rating_counter': reviewCount,
       // 'images': images,
@@ -66,6 +73,7 @@ class Tour {
       'user_name': creator,
       'l_edited': lastEdited,
       'tot_view': totViews,
+      'status': status,
     };
   }
 }

@@ -1,13 +1,15 @@
-// mobile/lib/services/offline_storage_service.dart
 import 'dart:convert';
 import 'dart:io';
-import 'package:path_provider/path_provider.dart';
+
+import 'package:archive/archive.dart';
 import 'package:dio/dio.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:xr_tour_guide/services/auth_service.dart';
+import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import '../models/tour.dart';
-import '../models/waypoint.dart';
+import 'package:xr_tour_guide/services/auth_service.dart';
+
 import 'api_service.dart';
 
 final offlineStorageServiceProvider = Provider<OfflineStorageService>((ref) {
@@ -35,298 +37,171 @@ class OfflineStorageService {
   }
 
   // Download and store a tour offline
+// Download and store a tour offline (bundle-first)
   Future<bool> downloadTourOffline(int tourId) async {
-    //TODO: Download della mappa in pmtiles
     try {
-      // 1. Get tour details
-      final tourResponse = await apiService.getTourDetails(tourId, baseUrl: apiService.getCurrentBaseUrl());
-      final tour = Tour.fromJson(tourResponse.data);
-
-      // 2. Get tour waypoints
-      final waypointsResponse = await apiService.getTourWaypoints(tourId, baseUrl: apiService.getCurrentBaseUrl());
-      final waypointsData = waypointsResponse.data;
-
-      // 3. Create tour directory
       final offlineDir = await _offlineDirectory;
-      print("Offline directory: ${offlineDir.absolute.path}");
       final tourDir = Directory('${offlineDir.path}/tour_$tourId');
-      print("Tour directory: ${tourDir.path}");
-      if (!await tourDir.exists()) {
-        await tourDir.create(recursive: true);
+
+      // pulizia preventiva per evitare mix di versioni vecchie/nuove
+      if (await tourDir.exists()) {
+        await tourDir.delete(recursive: true);
       }
+      await tourDir.create(recursive: true);
 
-      await _downloadMap(tourId, tourDir);
+      final bundleZip = File('${tourDir.path}/offline_bundle.zip');
 
-      // 4. Download tour default image
-      await _downloadImage("${apiService.getCurrentBaseUrl()}/stream_minio_resource/?attachment=True&tour=${tour.id}", '${tourDir.path}/default_image.jpg');
+      try {
+        await _downloadOfflineBundle(tourId, bundleZip.path);
+        await _extractZip(bundleZip, tourDir);
 
-      // 5. Process waypoints and download their resources
-      List<Map<String, dynamic>> processedWaypoints = [];
-
-      for (var waypointData in waypointsData['waypoints']) {
-        final waypoint = Waypoint.fromJson(waypointData);
-        final processedWaypoint = await _processWaypointOffline(
-          waypoint,
-          tourDir,
-        );
-        processedWaypoints.add(processedWaypoint);
-      }
-
-      // 6. Process sub-tours if any
-      List<Map<String, dynamic>>? processedSubTours;
-      if (waypointsData['sub_tours'] != null) {
-        processedSubTours = [];
-        for (var subTourData in waypointsData['sub_tours']) {
-          final subTourInfo = subTourData['sub_tour'];
-          final subWaypoints = subTourData['waypoints'] as List;
-
-          List<Map<String, dynamic>> processedSubWaypoints = [];
-          for (var subWaypointData in subWaypoints) {
-            final subWaypoint = Waypoint.fromJson(subWaypointData);
-            final processedSubWaypoint = await _processWaypointOffline(
-              subWaypoint,
-              tourDir,
-            );
-            processedSubWaypoints.add(processedSubWaypoint);
-          }
-
-          processedSubTours.add({
-            'sub_tour': subTourInfo,
-            'waypoints': processedSubWaypoints,
-          });
+        // il bundle deve contenere obbligatoriamente tour_data.json
+        final tourDataFile = File('${tourDir.path}/tour_data.json');
+        if (!await tourDataFile.exists()) {
+          throw Exception('Invalid bundle: tour_data.json missing');
         }
+
+        await _normalizeOfflinePathsInTourData(tourDataFile, tourDir.path);
+
+        final tourData =
+            jsonDecode(await tourDataFile.readAsString())
+                as Map<String, dynamic>;
+
+        final tourJson =
+            (tourData['tour'] as Map?)?.cast<String, dynamic>() ?? {};
+        await _updateOfflineToursListFromPayload(tourId, tourJson);
+
+        if (await bundleZip.exists()) {
+          await bundleZip.delete();
+        }
+
+        return true;
+      } on DioException catch (e) {
+        // fallback opzionale: se bundle non pronto/non trovato, usa pipeline legacy
+        final code = e.response?.statusCode;
+        if (code == 404) {
+          debugPrint(
+            'Offline bundle not ready for tour $tourId',
+          );
+        }
+        rethrow;
       }
-
-      // 7. Save tour data locally
-      final tourData = {
-        'tour': tour.toJson(),
-        'waypoints': processedWaypoints,
-        'sub_tours': processedSubTours,
-        'downloaded_at': DateTime.now().toIso8601String(),
-        'version': '1.0',
-      };
-
-      final tourDataFile = File('${tourDir.path}/tour_data.json');
-      await tourDataFile.writeAsString(jsonEncode(tourData));
-
-      //Save training_data
-      await _downloadOfflineIndex(tourId, tourDir);
-
-
-
-      // 8. Update offline tours list
-      await _updateOfflineToursList(tourId, tour);
-
-
-
-      return true;
     } catch (e) {
-      print('Error downloading tour offline: $e');
-      // Clean up partial download
+      debugPrint('Error downloading tour offline: $e');
       await removeTourOffline(tourId);
       return false;
     }
   }
 
-  // Process a single waypoint for offline storage
-  Future<Map<String, dynamic>> _processWaypointOffline(
-    Waypoint waypoint,
-    Directory tourDir,
-  ) async {
-    print("Processing waypoint ${waypoint.id} for offline storage");
-    final waypointDir = Directory('${tourDir.path}/waypoint_${waypoint.id}');
-    if (!await waypointDir.exists()) {
-      await waypointDir.create(recursive: true);
-    }
+  Future<void> _downloadOfflineBundle(int tourId, String savePath) async {
+    final url = _toAbsoluteUrl('/download_offline_bundle/$tourId/');
 
-    final processedWaypoint = waypoint.toJson();
+    final response = await apiService.dio.download(
+      url,
+      savePath,
+      options: Options(
+        responseType: ResponseType.bytes,
+        // headers auth già gestiti da apiService.dio interceptor/options
+      ),
+    );
 
-    // Download waypoint images
-    List<String> localImages = [];
-    final imagesResponse = await apiService.loadResource(waypoint.id, "images", baseUrl: apiService.getCurrentBaseUrl());
-    Map<String, dynamic> imagesContent = imagesResponse.data as Map<String, dynamic>;
-    print("Images content: $imagesContent");
-    // if (imagesContent['readme'] != null) {
-    //   List<String> imagesLinks = extractMarkdownLinks(imagesContent['readme']);
-    //   print("Extracted image links: $imagesLinks");
-    //   for (int i = 0; i < imagesLinks.length; i++) {
-    //     final imageUrl = imagesLinks[i];
-    //     print("Downloading image: $imageUrl");
-    //     final localPath = '${waypointDir.path}/image_$i.jpg';
-
-    //     if (await _downloadImage(imageUrl, localPath)) {
-    //       localImages.add(localPath);
-    //     }
-    //   }
-    //   processedWaypoint['local_images'] = localImages;
-    // }
-
-    try {
-      List<String> imagesLinks = [];
-      if (imagesContent["images"] != null && imagesContent["images"] is List) {
-        imagesLinks = (imagesContent["images"] as List).cast<String>();
-      }else if(imagesContent["url"] != null) {
-        imagesLinks.add(imagesContent["url"]);
-      }
-
-      for (int i = 0; i < imagesLinks.length; i++) {
-        final imageUrl = _addAttachmentParam(_toAbsoluteUrl(imagesLinks[i]));
-        print("Downloading image: $imageUrl");
-        final localPath = '${waypointDir.path}/image_$i.jpg.zlib';
-
-        if (await _downloadImage(imageUrl, localPath)) {
-          localImages.add(localPath);
-        }
-      }
-      processedWaypoint['local_images'] = localImages;
-    }catch (e) {
-      print("Error extracting image links: $e");
-    }
-
-    // Download resources if available
-    final resources = await _downloadWaypointResources(waypoint, waypointDir);
-    processedWaypoint['local_resources'] = resources;
-
-    return processedWaypoint;
-  }
-
-
-  // Download waypoint resources (text, audio, video, pdf)
-  Future<Map<String, dynamic?>> _downloadWaypointResources(
-    Waypoint waypoint,
-    Directory waypointDir,
-  ) async {
-    Map<String, String?> localResources = {
-      'readme': null,
-      "links": null,
-      'audio': null,
-      'video': null,
-      'pdf': null,
-    };
-
-    Future<void> _downloadGenericResource(String type, String extension) async {
-      try {
-        print("Downloading $type for waypoint ${waypoint.id}");
-        final response = await apiService.loadResource(waypoint.id, type, baseUrl: apiService.getCurrentBaseUrl());
-        Map<String, dynamic> content = response.data as Map<String, dynamic>;
-
-        String? url;
-        if (content.containsKey('url')) {
-          url = content['url'];
-        } else if (content.containsKey(type) && content[type] is String) {
-          final val = content[type] as String;
-          if (val.startsWith('/')) {
-            url = val;
-          }
-        }
-
-        if (url != null) {
-          final resourceUrl = _addAttachmentParam(_toAbsoluteUrl(url));
-          final localPath = '${waypointDir.path}/$type.$extension';
-
-          if (await _downloadFile(resourceUrl, localPath)) {
-            localResources[type] = localPath;
-          }
-        }
-      } catch (e) {
-        print('No $type for waypoint ${waypoint.id}');
-      }
-    }
-
-    // Download text/readme and links
-    // try {
-    //   final readmeResponse = await apiService.loadResource(
-    //     waypoint.id,
-    //     'readme',
-    //   );
-    //   Map<String, dynamic> content = readmeResponse.data as Map<String, dynamic>;
-
-    //   if (content['readme'] != null) {
-    //     final readmeFile = File('${waypointDir.path}/readme.md');
-    //     await readmeFile.writeAsString(content['readme']);
-    //     localResources['readme'] = readmeFile.path;
-    //   }
-
-    //   final responseLink = await apiService.loadResource(waypoint.id, "links");
-    //   Map<String, dynamic> linksContent = responseLink.data as Map<String, dynamic>;
-    //   if (linksContent['links'] != null) {
-    //     final linksFile = File('${waypointDir.path}/links.json');
-    //     await linksFile.writeAsString(jsonEncode(linksContent['links']));
-    //     localResources['links'] = linksFile.path;
-    //   }
-
-    // } catch (e) {
-    //   print('No readme for waypoint ${waypoint.id}');
-    // }
-
-    // // Download other resources (audio, video, pdf)
-    // final resourceTypes = ['audio', 'video', 'pdf'];
-    // for (String type in resourceTypes) {
-    //   try {
-    //     final response = await apiService.loadResource(waypoint.id, type);
-    //     Map<String, dynamic> content = response.data as Map<String, dynamic>;
-    //     final resourceUrl = _addAttachmentParam(content[type]);
-    //     final localPath = '${waypointDir.path}/$type.$type';
-
-    //     if (await _downloadFile(resourceUrl, localPath)) {
-    //       localResources[type] = localPath;
-    //     }
-    //   } catch (e) {
-    //     print('No $type for waypoint ${waypoint.id}');
-    //   }
-    // }
-
-    await _downloadGenericResource("readme", "md");
-
-    try {
-      final responseLink = await apiService.loadResource(waypoint.id, "links", baseUrl: apiService.getCurrentBaseUrl());
-      Map<String, dynamic> linksContent = responseLink.data as Map<String, dynamic>;
-      if (linksContent['links'] != null && linksContent['links'] is List) {
-        final linksFile = File('${waypointDir.path}/links.json');
-        await linksFile.writeAsString(jsonEncode(linksContent['links']));
-        localResources['links'] = linksFile.path;
-      }
-    } catch (e) {
-      print('No links for waypoint ${waypoint.id}');
-    }
-
-    await _downloadGenericResource("audio", "mp4");
-    await _downloadGenericResource("video", "mp4");
-    await _downloadGenericResource("pdf", "pdf");
-
-    return localResources;
-  }
-
-  Future<void> _downloadOfflineIndex(int tourId, Directory tourDir) async {
-    try {
-      final url = '${apiService.getCurrentBaseUrl()}/download_model?tour_id=$tourId';
-      final file = File('${tourDir.path}/training_data.json');
-      final response = await _dio.get(url, options: Options(responseType: ResponseType.json));
-      final data = response.data;
-      await file.writeAsString(jsonEncode(data));
-    } catch (e) {
-      print('Error downloading offline index: $e');
-    }
-  }
-
-  Future<void> _downloadMap(int tourId, Directory tourDir) async {
-    try {
-      final url = _toAbsoluteUrl('/cut_map/$tourId/');
-      final localPath = '${tourDir.path}/tour_$tourId.pmtiles';
-
-      await apiService.dio.download(
-        url,
-        localPath,
-        options: Options(
-          method: 'POST',
-          // extra: {'base_url': apiService.getCurrentBaseUrl()},
-        ),
+    if (response.statusCode != 200) {
+      throw Exception(
+        'Failed to download offline bundle: HTTP ${response.statusCode}',
       );
-      print("Map downloaded successfully to $localPath");
-    } catch (e) {
-      print("Error downloading map: $e");
     }
   }
+
+  Future<void> _extractZip(File zipFile, Directory destinationDir) async {
+    final bytes = await zipFile.readAsBytes();
+    final archive = ZipDecoder().decodeBytes(bytes, verify: true);
+
+    for (final file in archive) {
+      final outPath = p.normalize(p.join(destinationDir.path, file.name));
+
+      // protezione path traversal
+      if (!outPath.startsWith(p.normalize(destinationDir.path))) {
+        throw Exception('Invalid zip entry path: ${file.name}');
+      }
+
+      if (file.isFile) {
+        final outFile = File(outPath);
+        await outFile.parent.create(recursive: true);
+        await outFile.writeAsBytes(file.content as List<int>, flush: true);
+      } else {
+        await Directory(outPath).create(recursive: true);
+      }
+    }
+  }
+
+  Future<void> _normalizeOfflinePathsInTourData(
+    File tourDataFile,
+    String tourRootPath,
+  ) async {
+    final raw = await tourDataFile.readAsString();
+    final data = jsonDecode(raw) as Map<String, dynamic>;
+
+    void normalizeWaypoint(Map<String, dynamic> wp) {
+      // local_images
+      final localImages = (wp['local_images'] as List?)?.cast<dynamic>() ?? [];
+      wp['local_images'] =
+          localImages.map((img) {
+            final s = img.toString();
+            if (p.isAbsolute(s)) return s;
+            return p.normalize(p.join(tourRootPath, s));
+          }).toList();
+
+      // local_resources
+      final localResources =
+          (wp['local_resources'] as Map?)?.cast<String, dynamic>() ?? {};
+      final normalizedResources = <String, dynamic>{};
+
+      localResources.forEach((key, value) {
+        if (value == null) {
+          normalizedResources[key] = null;
+        } else {
+          final s = value.toString();
+          normalizedResources[key] =
+              p.isAbsolute(s) ? s : p.normalize(p.join(tourRootPath, s));
+        }
+      });
+
+      // garantisci chiavi attese
+      for (final k in const ['readme', 'links', 'audio', 'video', 'pdf']) {
+        normalizedResources.putIfAbsent(k, () => null);
+      }
+
+      wp['local_resources'] = normalizedResources;
+    }
+
+    final waypoints = (data['waypoints'] as List?)?.cast<dynamic>() ?? [];
+    for (final w in waypoints) {
+      if (w is Map<String, dynamic>) {
+        normalizeWaypoint(w);
+      } else if (w is Map) {
+        normalizeWaypoint(w.cast<String, dynamic>());
+      }
+    }
+
+    final subTours = (data['sub_tours'] as List?)?.cast<dynamic>() ?? [];
+    for (final st in subTours) {
+      final stMap =
+          (st is Map<String, dynamic>)
+              ? st
+              : (st as Map).cast<String, dynamic>();
+      final subWps = (stMap['waypoints'] as List?)?.cast<dynamic>() ?? [];
+      for (final w in subWps) {
+        if (w is Map<String, dynamic>) {
+          normalizeWaypoint(w);
+        } else if (w is Map) {
+          normalizeWaypoint(w.cast<String, dynamic>());
+        }
+      }
+    }
+
+    await tourDataFile.writeAsString(jsonEncode(data), flush: true);
+  }
+
 
   List<String> extractMarkdownLinks(String text) {
     final regex = RegExp(
@@ -366,50 +241,27 @@ class OfflineStorageService {
     }
   }
 
-
-  // Download an image file
-  Future<bool> _downloadImage(String url, String localPath) async {
-    try {
-      final response = await _dio.download(url, localPath);
-      return response.statusCode == 200;
-    } catch (e) {
-      print('Error downloading image $url: $e');
-      return false;
-    }
-  }
-
-  // Download a general file
-  Future<bool> _downloadFile(String url, String localPath) async {
-    try {
-      final response = await _dio.download(url, localPath);
-      return response.statusCode == 200;
-    } catch (e) {
-      print('Error downloading file $url: $e');
-      return false;
-    }
-  }
-
   // Update the list of offline tours
-  Future<void> _updateOfflineToursList(int tourId, Tour tour) async {
+  Future<void> _updateOfflineToursListFromPayload(
+    int tourId,
+    Map<String, dynamic> tourJson,
+  ) async {
     final prefs = await SharedPreferences.getInstance();
     final offlineToursJson = prefs.getStringList(_offlineToursKey) ?? [];
 
     final offlineTour = {
       'id': tourId,
-      'title': tour.title,
-      'description': tour.description,
+      'title': (tourJson['title'] ?? '').toString(),
+      'description': (tourJson['description'] ?? '').toString(),
       'downloaded_at': DateTime.now().toIso8601String(),
     };
 
-    // Remove existing entry if present
-    offlineToursJson.removeWhere((tourJson) {
-      final tourData = jsonDecode(tourJson);
-      return tourData['id'] == tourId;
+    offlineToursJson.removeWhere((tourRaw) {
+      final t = jsonDecode(tourRaw) as Map<String, dynamic>;
+      return t['id'] == tourId;
     });
 
-    // Add new entry
     offlineToursJson.add(jsonEncode(offlineTour));
-
     await prefs.setStringList(_offlineToursKey, offlineToursJson);
   }
 
@@ -443,7 +295,7 @@ class OfflineStorageService {
       }
       return null;
     } catch (e) {
-      print('Error reading offline tour data: $e');
+      debugPrint('Error reading offline tour data: $e');
       return null;
     }
   }
@@ -469,7 +321,7 @@ class OfflineStorageService {
 
       return true;
     } catch (e) {
-      print('Error removing offline tour: $e');
+      debugPrint('Error removing offline tour: $e');
       return false;
     }
   }
@@ -488,7 +340,7 @@ class OfflineStorageService {
       }
       return totalSize;
     } catch (e) {
-      print('Error calculating storage size: $e');
+      debugPrint('Error calculating storage size: $e');
       return 0;
     }
   }
@@ -506,7 +358,7 @@ class OfflineStorageService {
 
       return true;
     } catch (e) {
-      print('Error clearing offline data: $e');
+      debugPrint('Error clearing offline data: $e');
       return false;
     }
   }

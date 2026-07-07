@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/tour.dart';
 import '../models/category.dart';
@@ -8,18 +9,21 @@ class NearbyToursState {
   final List<Tour>? tours;
   final bool isLoading;
   final DateTime? lastUpdated;
+  final String? language;
 
-  NearbyToursState({this.tours, this.isLoading = false, this.lastUpdated});
+  NearbyToursState({this.tours, this.isLoading = false, this.lastUpdated, this.language});
 
   NearbyToursState copyWith({
     List<Tour>? tours,
     bool? isLoading,
     DateTime? lastUpdated,
+    String? language,
   }) {
     return NearbyToursState(
       tours: tours ?? this.tours,
       isLoading: isLoading ?? this.isLoading,
       lastUpdated: lastUpdated ?? this.lastUpdated,
+      language: language ?? this.language,
     );
   }
 }
@@ -27,15 +31,21 @@ class NearbyToursState {
 class NearbyToursNotifier extends StateNotifier<NearbyToursState> {
   final TourService _tourService;
 
-  NearbyToursNotifier(this._tourService) : super(NearbyToursState());
+  NearbyToursNotifier(this._tourService)
+    : super(NearbyToursState(isLoading: true));
 
   Future<void> loadTours({
     bool forceRefresh = false,
     double? lat,
     double? lon,
+    String? language,
   }) async {
+    debugPrint(
+      "loadTours called with forceRefresh=$forceRefresh, lat=$lat, lon=$lon",
+    );
     // Se abbiamo già i dati e non è un refresh forzato, non fare nulla
-    if (!forceRefresh && state.tours != null && state.tours!.isNotEmpty) {
+    if (!forceRefresh && state.tours != null && state.tours!.isNotEmpty && state.language == language) {
+      debugPrint("Using cached tours data");
       return;
     }
 
@@ -44,18 +54,21 @@ class NearbyToursNotifier extends StateNotifier<NearbyToursState> {
     try {
       List<Tour> tours;
       if (lat != null && lon != null) {
-        tours = await _tourService.getNearbyTours(0, lat, lon);
+        debugPrint("Loading tours for location: ($lat, $lon)");
+        tours = await _tourService.getNearbyTours(0, lat, lon, language: language);
       } else {
-        tours = await _tourService.getAllNearbyTours(0);
+        debugPrint("Loading tours without location");
+        tours = await _tourService.getAllNearbyTours(0, language: language);
       }
       state = state.copyWith(
         tours: tours,
         isLoading: false,
         lastUpdated: DateTime.now(),
+        language: language,
       );
     } catch (e) {
       state = state.copyWith(isLoading: false);
-      print("Error loading tours: $e");
+      debugPrint("Error loading tours: $e");
     }
   }
 }
