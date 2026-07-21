@@ -5,7 +5,6 @@ WORKDIR /workspace
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 ENV PIP_NO_CACHE_DIR=1
-ENV PIP_EXTRA_INDEX_URL=https://download.pytorch.org/whl/cpu
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
 build-essential \

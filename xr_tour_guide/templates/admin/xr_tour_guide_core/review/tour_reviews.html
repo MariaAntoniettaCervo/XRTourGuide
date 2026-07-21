@@ -1,0 +1,352 @@
+{% extends "unfold/layouts/base.html" %}
+{% load i18n unfold %}
+{% block breadcrumbs %}{% endblock %}
+
+{% block extrahead %}
+{{ block.super }}
+<style>
+    :root {
+        --review-page-bg: #f8f9fc;
+        --review-surface: #ffffff;
+        --review-surface-2: #f9fafb;
+        --review-border: #e5e7eb;
+        --review-border-soft: #f3f4f6;
+        --review-text: #111827;
+        --review-text-strong: #0f172a;
+        --review-muted: #6b7280;
+        --review-link: #2563eb;
+        --review-link-hover: #1d4ed8;
+        --review-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+    }
+
+    .dark {
+        --review-page-bg: #161b27;
+        --review-surface: #1e2330;
+        --review-surface-2: #111827;
+        --review-border: #2d3548;
+        --review-border-soft: #374151;
+        --review-text: #e5e7eb;
+        --review-text-strong: #f9fafb;
+        --review-muted: #9ca3af;
+        --review-link: #60a5fa;
+        --review-link-hover: #93c5fd;
+        --review-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+    }
+
+    .review-page {
+        min-height: calc(100vh - 120px);
+        background: var(--review-page-bg);
+        color: var(--review-text);
+        padding: 24px;
+        border-radius: 16px;
+    }
+
+    .review-page-header {
+        margin-bottom: 24px;
+    }
+
+    .review-page-title {
+        font-size: 24px;
+        font-weight: 700;
+        color: var(--review-text-strong);
+        margin: 0;
+    }
+
+    .review-page-subtitle,
+    .review-muted,
+    .review-meta {
+        color: var(--review-muted);
+    }
+
+    .review-table-shell,
+    .review-card,
+    .review-empty {
+        background: var(--review-surface);
+        border: 1px solid var(--review-border);
+        color: var(--review-text);
+        border-radius: 12px;
+        box-shadow: var(--review-shadow);
+    }
+
+    .review-table-shell {
+        overflow-x: auto;
+    }
+
+    .review-table {
+        width: 100%;
+        border-collapse: collapse;
+        background: var(--review-surface);
+    }
+
+    .review-table thead {
+        background: var(--review-surface-2);
+    }
+
+    .review-table th {
+        padding: 12px 16px;
+        border-bottom: 1px solid var(--review-border);
+        color: var(--review-muted);
+        font-size: 12px;
+        font-weight: 700;
+        text-transform: uppercase;
+        text-align: left;
+        white-space: nowrap;
+    }
+
+    .review-table td {
+        padding: 14px 16px;
+        border-bottom: 1px solid var(--review-border-soft);
+        color: var(--review-text);
+        vertical-align: middle;
+        background: transparent;
+    }
+
+    .review-table tbody tr:hover {
+        background: var(--review-surface-2);
+    }
+
+    .review-table tbody tr:last-child td {
+        border-bottom: none;
+    }
+
+    .review-table th.tc,
+    .review-table td.tc {
+        text-align: center;
+    }
+
+    .review-table th.tr,
+    .review-table td.tr {
+        text-align: right;
+    }
+
+    .review-link,
+    .review-back-link {
+        color: var(--review-link);
+        font-weight: 700;
+        text-decoration: none;
+    }
+
+    .review-link:hover,
+    .review-back-link:hover {
+        color: var(--review-link-hover);
+        text-decoration: underline;
+    }
+
+    .review-tour-title,
+    .review-title {
+        color: var(--review-text-strong);
+        font-weight: 700;
+    }
+
+    .review-small {
+        font-size: 13px;
+    }
+
+    .review-meta {
+        margin-top: 4px;
+        font-size: 12px;
+    }
+
+    .review-card {
+        padding: 20px;
+    }
+
+    .review-card + .review-card {
+        margin-top: 16px;
+    }
+
+    .review-card-header {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 16px;
+    }
+
+    .review-comment {
+        margin-top: 16px;
+        color: var(--review-text);
+        white-space: pre-line;
+        line-height: 1.6;
+    }
+
+    .review-summary {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        margin-top: 14px;
+    }
+
+    .review-badge {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 999px;
+        padding: 4px 10px;
+        font-size: 13px;
+        font-weight: 700;
+        line-height: 1.2;
+        white-space: nowrap;
+    }
+
+    .badge-blue {
+        background: #dbeafe;
+        color: #1d4ed8;
+        border: 1px solid #93c5fd;
+    }
+
+    .dark .badge-blue {
+        background: #1e3a8a;
+        color: #bfdbfe;
+        border-color: #3b82f6;
+    }
+
+    .badge-yellow {
+        background: #fef3c7;
+        color: #92400e;
+        border: 1px solid #fcd34d;
+    }
+
+    .dark .badge-yellow {
+        background: #78350f;
+        color: #fde68a;
+        border-color: #f59e0b;
+    }
+
+    .badge-gray {
+        background: #f3f4f6;
+        color: #374151;
+        border: 1px solid #d1d5db;
+    }
+
+    .dark .badge-gray {
+        background: #374151;
+        color: #e5e7eb;
+        border-color: #6b7280;
+    }
+
+    .review-button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 8px;
+        padding: 7px 12px;
+        background: #2563eb;
+        color: #ffffff;
+        font-size: 13px;
+        font-weight: 700;
+        text-decoration: none;
+        white-space: nowrap;
+    }
+
+    .review-button:hover {
+        background: #1d4ed8;
+        color: #ffffff;
+    }
+
+    .dark .review-button {
+        background: #1d4ed8;
+    }
+
+    .dark .review-button:hover {
+        background: #2563eb;
+    }
+
+    .review-empty {
+        padding: 32px;
+        text-align: center;
+        color: var(--review-muted);
+    }
+
+    .review-delete-wrap {
+        margin-top: 16px;
+        text-align: right;
+    }
+
+    .review-delete-link {
+        color: #dc2626;
+        font-size: 13px;
+        font-weight: 700;
+        text-decoration: none;
+    }
+
+    .dark .review-delete-link {
+        color: #f87171;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="review-page">
+    <div class="review-page-header">
+        <a href="{% url 'admin:xr_tour_guide_core_review_changelist' %}"
+           class="review-back-link">
+            ← {% trans "Back to tours" %}
+        </a>
+
+        <h1 class="review-page-title">
+            {{ tour.title }}
+        </h1>
+
+        <div class="review-page-subtitle">
+            {{ tour.place }} · {{ tour.category }}
+            {% if tour.language %}
+                · {{ tour.language|upper }}
+            {% endif %}
+        </div>
+
+        <div class="review-summary">
+            <span class="review-badge badge-blue">
+                {{ review_count }} {% trans "reviews" %}
+            </span>
+
+            <span class="review-badge badge-yellow">
+                ⭐ {% if avg_rating %}{{ avg_rating|floatformat:1 }}{% else %}-{% endif %}
+            </span>
+        </div>
+    </div>
+
+    {% if reviews %}
+        <div class="review-list">
+            {% for review in reviews %}
+                <div class="review-card">
+                    <div class="review-card-header">
+                        <div>
+                            <div class="review-title">
+                                {{ review.user.username }}
+                            </div>
+
+                            <div class="review-muted review-small">
+                                {% if review.user.email %}
+                                    {{ review.user.email }} ·
+                                {% endif %}
+                                {{ review.timestamp|date:"d M Y H:i" }}
+                            </div>
+                        </div>
+
+                        <div class="review-badge badge-yellow">
+                            ⭐ {{ review.rating }}
+                        </div>
+                    </div>
+
+                    <div class="review-comment">
+                        {{ review.comment }}
+                    </div>
+
+                    {% if can_delete_reviews %}
+                        <div class="review-delete-wrap">
+                            <a href="{% url 'admin:xr_tour_guide_core_review_delete' review.id %}"
+                               class="review-delete-link">
+                                {% trans "Delete" %}
+                            </a>
+                        </div>
+                    {% endif %}
+                </div>
+            {% endfor %}
+        </div>
+    {% else %}
+        <div class="review-empty">
+            {% trans "No reviews found for this tour." %}
+        </div>
+    {% endif %}
+</div>
+{% endblock %}

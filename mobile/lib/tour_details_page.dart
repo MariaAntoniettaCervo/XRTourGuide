@@ -85,10 +85,30 @@ class _TourDetailScreenState extends ConsumerState<TourDetailScreen>
 
   // Define your waypoints with coordinates
   List<Waypoint> _waypoints = [];
-  List<Waypoint> get _realWaypoints => _waypoints.where((wp) => !wp.isPreliminaryInfo).toList();
-  List<Waypoint> get _preliminaryWaypoints => _waypoints.where((wp) => wp.isPreliminaryInfo).toList();
+  List<Waypoint> get _realWaypoints =>
+      _waypoints.where((wp) => !wp.isPreliminaryInfo).toList();
+  List<Waypoint> get _preliminaryWaypoints =>
+      _waypoints.where((wp) => wp.isPreliminaryInfo).toList();
+
+  int? _displayWaypointNumberForRawIndex(int rawIndex) {
+    if (rawIndex < 0 || rawIndex >= _waypoints.length) {
+      return null; // Out of bounds
+    }
+
+    final waypoint = _waypoints[rawIndex];
+
+    if (waypoint.isPreliminaryInfo) {
+      return null;
+    }
+
+    return _waypoints
+        .take(rawIndex + 1)
+        .where((wp) => !wp.isPreliminaryInfo)
+        .length;
+  }
+
   bool get _hasMapWaypoints => _realWaypoints.isNotEmpty;
-  
+
   bool _isLoadingWaypoints = true;
 
   List<Review> _reviews = [];
@@ -673,8 +693,10 @@ class _TourDetailScreenState extends ConsumerState<TourDetailScreen>
     int index,
     Waypoint waypoint, {
     bool isItineraryView = false,
+    int? displayIndex,
   }) {
-    final bool isSelected = isItineraryView ? false : _selectedWaypointIndex == index ;
+    final bool isSelected =
+        isItineraryView ? false : _selectedWaypointIndex == index;
     final bool isSelectedMappa =
         _selectedWaypointIndexMappa == index && !isItineraryView;
 
@@ -759,7 +781,8 @@ class _TourDetailScreenState extends ConsumerState<TourDetailScreen>
               ),
               child: Center(
                 child: Text(
-                  isItineraryView ? '${index}' : '${index + 1}',
+                  // isItineraryView ? '${index}' : '${index + 1}',
+                  '${displayIndex ?? index + 1}',
                   style: TextStyle(
                     color: Colors.white,
                     fontWeight: FontWeight.bold,
@@ -833,7 +856,10 @@ class _TourDetailScreenState extends ConsumerState<TourDetailScreen>
                         _currentPosition!.latitude,
                         _currentPosition!.longitude,
                       )
-                      : LatLng(_realWaypoints[0].latitude, _realWaypoints[0].longitude),
+                      : LatLng(
+                        _realWaypoints[0].latitude,
+                        _realWaypoints[0].longitude,
+                      ),
               initialZoom: 13.0,
               maxZoom: 16.0,
               interactionOptions: const InteractionOptions(
@@ -984,7 +1010,8 @@ class _TourDetailScreenState extends ConsumerState<TourDetailScreen>
               1.0,
             ], // Snap points including full screen
             builder: (context, scrollController) {
-              final selectedWaypoint = _realWaypoints[_selectedWaypointIndexMappa];
+              final selectedWaypoint =
+                  _realWaypoints[_selectedWaypointIndexMappa];
 
               return Container(
                 decoration: const BoxDecoration(
@@ -2089,13 +2116,32 @@ class _TourDetailScreenState extends ConsumerState<TourDetailScreen>
                           // Waypoints markers
                           MarkerLayer(
                             markers:
-                                _waypoints.asMap().entries.map((entry) {
-                                  int index = entry.key;
-                                  Waypoint waypoint = entry.value;
+                            // _waypoints.asMap().entries.map((entry) {
+                            //   int index = entry.key;
+                            //   Waypoint waypoint = entry.value;
+                            //   return _buildWaypointMarker(
+                            //     index,
+                            //     waypoint,
+                            //     isItineraryView: true,
+                            //   );
+                            // }).toList(),
+                            _waypoints.asMap().entries
+                                .where(
+                                  (entry) => !entry.value.isPreliminaryInfo,
+                                )
+                                .map((entry) {
+                                  final rawIndex = entry.key;
+                                  final waypoint = entry.value;
+                                  final displayIndex =
+                                      _displayWaypointNumberForRawIndex(
+                                        rawIndex,
+                                      );
+
                                   return _buildWaypointMarker(
-                                    index,
+                                    rawIndex,
                                     waypoint,
                                     isItineraryView: true,
+                                    displayIndex: displayIndex,
                                   );
                                 }).toList(),
                           ),
@@ -2117,6 +2163,7 @@ class _TourDetailScreenState extends ConsumerState<TourDetailScreen>
                     _buildWaypointItem(
                       waypointIndex: waypoint.id,
                       index: index,
+                      displayIndex: _displayWaypointNumberForRawIndex(index),
                       title: waypoint.title,
                       subtitle: waypoint.subtitle,
                       description: waypoint.description,
@@ -2256,8 +2303,10 @@ class _TourDetailScreenState extends ConsumerState<TourDetailScreen>
     List<Waypoint>? subWaypoints,
     int? parentIndex,
     bool isSubWaypoint = false,
+    int? displayIndex,
   }) {
-    final bool isScanned = !isPreliminaryInfo && _scannedWaypoints.contains(waypointIndex);
+    final bool isScanned =
+        !isPreliminaryInfo && _scannedWaypoints.contains(waypointIndex);
 
     // Determina se questo item è espanso
     bool isExpanded;
@@ -2286,13 +2335,21 @@ class _TourDetailScreenState extends ConsumerState<TourDetailScreen>
                   vertical: 4.0,
                 ),
                 decoration: BoxDecoration(
-                  color: isPreliminaryInfo ? AppColors.primary.withOpacity(0.06) : (isSubWaypoint ? Colors.grey.shade50 : Colors.white),
+                  color:
+                      isPreliminaryInfo
+                          ? AppColors.primary.withOpacity(0.06)
+                          : (isSubWaypoint
+                              ? Colors.grey.shade50
+                              : Colors.white),
                   borderRadius: BorderRadius.circular(12),
-                  border: isPreliminaryInfo 
-                    ? Border.all(color: AppColors.primary.withOpacity(0.25)) :
-                      (isSubWaypoint
-                          ? Border.all(color: Colors.grey.shade200)
-                          : null),
+                  border:
+                      isPreliminaryInfo
+                          ? Border.all(
+                            color: AppColors.primary.withOpacity(0.25),
+                          )
+                          : (isSubWaypoint
+                              ? Border.all(color: Colors.grey.shade200)
+                              : null),
                   boxShadow:
                       isSubWaypoint
                           ? []
@@ -2352,7 +2409,8 @@ class _TourDetailScreenState extends ConsumerState<TourDetailScreen>
                             _selectedWaypointIndex = index;
 
                             // Centra la mappa SOLO per waypoints principali
-                            if (!isPreliminaryInfo && index < _waypoints.length &&
+                            if (!isPreliminaryInfo &&
+                                index < _waypoints.length &&
                                 _selectedTab == 'Itinerario' &&
                                 (tourCategory != "INDOOR" &&
                                     tourCategory != "GUIDE")) {
@@ -2375,54 +2433,22 @@ class _TourDetailScreenState extends ConsumerState<TourDetailScreen>
                       ),
                       child: Row(
                         children: [
-                          // Waypoint number con logica degli indici corretta
-                          // Container(
-                          //   width: isSubWaypoint ? 24 : 28,
-                          //   height: isSubWaypoint ? 24 : 28,
-                          //   decoration: BoxDecoration(
-                          //     color:
-                          //         isSubWaypoint
-                          //             ? AppColors.primary.withOpacity(0.7)
-                          //             : AppColors.primary,
-                          //     shape: BoxShape.circle,
-                          //     border: Border.all(
-                          //       color: Colors.white,
-                          //       width: 1.5,
-                          //     ),
-                          //     boxShadow: [
-                          //       BoxShadow(
-                          //         color: Colors.black.withOpacity(0.2),
-                          //         blurRadius: 3,
-                          //         offset: const Offset(0, 1),
-                          //       ),
-                          //     ],
-                          //   ),
-                          //   child: Center(
-                          //     child: Text(
-                          //       // Logica corretta per gli indici
-                          //       isSubWaypoint
-                          //           ? '${(parentIndex ?? 0) + 1}.${index + 1}' // Sub-waypoint: 2.1, 2.2, etc.
-                          //           : '${index + 1}', // Waypoint principale: 1, 2, 3, etc.
-                          //       style: TextStyle(
-                          //         color: Colors.white,
-                          //         fontWeight: FontWeight.bold,
-                          //         fontSize: isSubWaypoint ? 10 : 12,
-                          //       ),
-                          //     ),
-                          //   ),
-                          // ),
                           Container(
                             width: isSubWaypoint ? 24 : 28,
                             height: isSubWaypoint ? 24 : 28,
                             decoration: BoxDecoration(
-                              color: isPreliminaryInfo
-                                  ? AppColors.primary.withOpacity(0.15)
-                                  : (isSubWaypoint
-                                      ? AppColors.primary.withOpacity(0.7)
-                                      : AppColors.primary),
+                              color:
+                                  isPreliminaryInfo
+                                      ? AppColors.primary.withOpacity(0.15)
+                                      : (isSubWaypoint
+                                          ? AppColors.primary.withOpacity(0.7)
+                                          : AppColors.primary),
                               shape: BoxShape.circle,
                               border: Border.all(
-                                color: isPreliminaryInfo ? AppColors.primary : Colors.white,
+                                color:
+                                    isPreliminaryInfo
+                                        ? AppColors.primary
+                                        : Colors.white,
                                 width: 1.5,
                               ),
                               boxShadow: [
@@ -2434,37 +2460,26 @@ class _TourDetailScreenState extends ConsumerState<TourDetailScreen>
                               ],
                             ),
                             child: Center(
-                              child: isPreliminaryInfo
-                                  ? Icon(
-                                      Icons.info_outline,
-                                      size: isSubWaypoint ? 14 : 16,
-                                      color: AppColors.primary,
-                                    )
-                                  : Text(
-                                      isSubWaypoint
-                                          ? '${(parentIndex ?? 0)}.${index + 1}'
-                                          : '${index}',
-                                      style: TextStyle(
-                                        color: Colors.white,
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: isSubWaypoint ? 10 : 12,
+                              child:
+                                  isPreliminaryInfo
+                                      ? Icon(
+                                        Icons.info_outline,
+                                        size: isSubWaypoint ? 14 : 16,
+                                        color: AppColors.primary,
+                                      )
+                                      : Text(
+                                        isSubWaypoint
+                                            ? '${(parentIndex ?? 1)}.${index + 1}'
+                                            : '${displayIndex ?? index + 1}',
+                                        style: TextStyle(
+                                          color: Colors.white,
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: isSubWaypoint ? 10 : 12,
+                                        ),
                                       ),
-                                    ),
                             ),
                           ),
                           const SizedBox(width: 16),
-
-                          // Waypoint name
-                          // Expanded(
-                          //   child: Text(
-                          //     title,
-                          //     style: TextStyle(
-                          //       fontSize: isSubWaypoint ? 14 : 16,
-                          //       fontWeight: FontWeight.w500,
-                          //       color: AppColors.textSecondary,
-                          //     ),
-                          //   ),
-                          // ),
                           Expanded(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
@@ -2485,10 +2500,14 @@ class _TourDetailScreenState extends ConsumerState<TourDetailScreen>
                                   title,
                                   style: TextStyle(
                                     fontSize: isSubWaypoint ? 14 : 16,
-                                    fontWeight: isPreliminaryInfo ? FontWeight.w700 : FontWeight.w500,
-                                    color: isPreliminaryInfo
-                                        ? AppColors.textPrimary
-                                        : AppColors.textSecondary,
+                                    fontWeight:
+                                        isPreliminaryInfo
+                                            ? FontWeight.w700
+                                            : FontWeight.w500,
+                                    color:
+                                        isPreliminaryInfo
+                                            ? AppColors.textPrimary
+                                            : AppColors.textSecondary,
                                   ),
                                 ),
                               ],
@@ -2696,7 +2715,8 @@ class _TourDetailScreenState extends ConsumerState<TourDetailScreen>
                       ),
 
                     // Navigate button - SOLO per waypoints principali
-                    if (!isPreliminaryInfo && !isSubWaypoint &&
+                    if (!isPreliminaryInfo &&
+                        !isSubWaypoint &&
                         _tourDetails!.category != "INDOOR" &&
                         _tourDetails!.category != "GUIDE") ...[
                       const SizedBox(height: 16),
@@ -2792,7 +2812,7 @@ class _TourDetailScreenState extends ConsumerState<TourDetailScreen>
                                 longitude: sub.longitude,
                                 isPreliminaryInfo: sub.isPreliminaryInfo,
                                 parentIndex:
-                                    index, // Passa l'indice del waypoint principale
+                                    displayIndex ?? 1, // Passa l'indice del waypoint principale
                                 isSubWaypoint:
                                     true, // Identifica come sub-waypoint
                               );
@@ -3013,7 +3033,7 @@ class _TourDetailScreenState extends ConsumerState<TourDetailScreen>
       );
       return;
     }
-    
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true, // Allows the sheet to be scrollable

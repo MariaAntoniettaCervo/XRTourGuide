@@ -14,7 +14,7 @@ services:
       MYSQL_PASSWORD: ${DB_PASSWORD}
       MYSQL_ROOT_PASSWORD: ${DB_PASSWORD}
     ports:
-      - "3307:3306"
+      - "127.0.0.1:3307:3306"
     volumes:
       - mysql_data_xr_tour_guide:/var/lib/mysql
     networks:
@@ -101,34 +101,37 @@ services:
       - backend_net
 
   minio:
-    image: minio/minio@sha256:a1ea29fa28355559ef137d71fc570e508a214ec84ff8083e39bc5428980b015e
+    # image: minio/minio@sha256:a1ea29fa28355559ef137d71fc570e508a214ec84ff8083e39bc5428980b015e
+    image: minio/minio@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e
     container_name: minio_tour_guide
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
     command: server /data --console-address ":9001"
+    expose:
+      - "9000"
     ports:
-      - "9001:9001" # console
-      - "9000:9000"
+      - "127.0.0.1:9001:9001" # console
     volumes:
       - minio_data:/data
     networks:
       - backend_net
 
   createbuckets:
-    image: minio/mc@sha256:aead63c77f9db9107f1696fb08ecb0faeda23729cde94b0f663edf4fe09728e3
+    # image: minio/mc@sha256:aead63c77f9db9107f1696fb08ecb0faeda23729cde94b0f663edf4fe09728e3
+    image: minio/mc@sha256:a7fe349ef4bd8521fb8497f55c6042871b2ae640607cf99d9bede5e9bdf11727
     depends_on:
       - minio
     env_file:
       - .env
     entrypoint: >
       /bin/sh -c '
-      until /usr/bin/mc config host add myminio http://minio:9000 ${MINIO_ROOT_USER} ${MINIO_ROOT_PASSWORD}; do
+      until /usr/bin/mc alias set myminio http://minio:9000 ${MINIO_ROOT_USER} ${MINIO_ROOT_PASSWORD}; do
         echo "Waiting for MinIO to be ready...";
         sleep 5;
       done;
       /usr/bin/mc mb --quiet myminio/${AWS_STORAGE_BUCKET_NAME} || true;
-      /usr/bin/mc policy set none myminio/${AWS_STORAGE_BUCKET_NAME} || true;
+      /usr/bin/mc anonymous set none myminio/${AWS_STORAGE_BUCKET_NAME} || true;
       '
     networks:
       - backend_net
@@ -144,8 +147,8 @@ services:
       - .env
     # gpus: all
     user: root
-    ports:
-      - "8090:8090"
+    expose:
+      - "8090"
     networks:
      - backend_net
 
@@ -160,8 +163,8 @@ services:
       - .env
     # gpus: all
     user: root
-    ports:
-      - "8050:8050"
+    expose:
+      - "8050"
     networks:
       - backend_net
 
@@ -222,8 +225,8 @@ services:
   #     - minio
   #   env_file:
   #     - .env
-  #   ports:
-  #     - "8081:8081"
+  #   expose:
+  #     - "8081"
   #   networks:
   #     - backend_net
 

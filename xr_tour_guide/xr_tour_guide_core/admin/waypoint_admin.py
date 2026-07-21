@@ -13,6 +13,244 @@ from django.urls import reverse
 from ..forms.waypoint_form import WaypointForm
 from .base import UnfoldNestedStackedInline
 from django.utils.translation import gettext_lazy as _
+from .permission import can_edit_tour, can_view_tour, visible_tours_queryset
+
+class ReadonlyWaypointInline(UnfoldNestedStackedInline):
+    model = Waypoint
+    extra = 0
+    can_delete = False
+    show_change_link = False
+
+    readonly_fields = (
+        "position",
+        "title",
+        "description",
+        "is_preliminary_info",
+        "place",
+        "coordinates",
+        "readonly_default_images",
+        "readonly_additional_images",
+        "readonly_resources",
+        "readonly_links",
+    )
+
+    fieldsets = (
+        (_("📍 Basic Information"), {
+            "fields": (
+                "position",
+                "title",
+                "description",
+                "is_preliminary_info",
+                "place",
+                "coordinates",
+            ),
+        }),
+        (_("🖼️ Images"), {
+            "fields": (
+                "readonly_default_images",
+                "readonly_additional_images",
+            ),
+            "classes": ("collapse",),
+        }),
+        (_("🎬 Multimedia Resources"), {
+            "fields": (
+                "readonly_resources",
+                "readonly_links",
+            ),
+            "classes": ("collapse",),
+        }),
+    )
+
+    def has_view_permission(self, request, obj=None):
+        if obj is None:
+            return True
+        return can_view_tour(request.user, obj)
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_add_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+    @admin.display(description=_("🖼️ Main Images"))
+    def readonly_default_images(self, obj):
+        return self._render_images(obj, TypeOfImage.DEFAULT)
+
+    @admin.display(description=_("🖼️ Additional Images"))
+    def readonly_additional_images(self, obj):
+        return self._render_images(obj, TypeOfImage.ADDITIONAL_IMAGES)
+
+    def _render_images(self, obj, image_type):
+        if not obj or not obj.pk:
+            return "-"
+
+        images = WaypointViewImage.objects.filter(
+            waypoint=obj,
+            type_of_images=image_type,
+        )
+
+        if not images.exists():
+            return mark_safe(
+                '<div style="color: light-dark(#6b7280, #9ca3af);">'
+                f'{_("No images uploaded.")}'
+                '</div>'
+            )
+
+        html = [
+            '<div style="display:flex; flex-wrap:wrap; gap:16px;">'
+        ]
+
+        for image in images:
+            img_url = (
+                f"/stream_minio_resource/"
+                f"?tour={obj.tour.pk}"
+                f"&waypoint={obj.pk}"
+                f"&file={image.image.name}"
+            )
+
+            html.append(f"""
+                <div style="
+                    width: 180px;
+                    border: 1px solid light-dark(#e5e7eb, #374151);
+                    border-radius: 8px;
+                    overflow: hidden;
+                    background: light-dark(#ffffff, #1f2937);
+                ">
+                    <img src="{img_url}"
+                         alt="Waypoint image"
+                         onclick="window.open('{img_url}', '_blank')"
+                         style="
+                            width: 100%;
+                            height: 130px;
+                            object-fit: cover;
+                            cursor: pointer;
+                            background: light-dark(#f3f4f6, #111827);
+                         "
+                         loading="lazy"
+                         decoding="async" />
+                    <div style="
+                        padding: 8px;
+                        font-size: 12px;
+                        color: light-dark(#6b7280, #9ca3af);
+                        word-break: break-all;
+                    ">
+                        {image.image.name.split("/")[-1]}
+                    </div>
+                </div>
+            """)
+
+        html.append("</div>")
+        return mark_safe("".join(html))
+
+    @admin.display(description=_("🎬 Uploaded Resources"))
+    def readonly_resources(self, obj):
+        if not obj or not obj.pk:
+            return "-"
+
+        resources = [
+            ("📄 PDF", obj.pdf_item),
+            ("🎧 Audio", obj.audio_item),
+            ("🎥 Video", obj.video_item),
+            ("📝 Readme", obj.readme_item),
+        ]
+
+        rows = []
+
+        for label, file_field in resources:
+            if not file_field:
+                continue
+
+            resource_url = (
+                f"/stream_minio_resource/"
+                f"?tour={obj.tour.pk}"
+                f"&waypoint={obj.pk}"
+                f"&file={file_field.name}"
+            )
+
+            rows.append(f"""
+                <div style="
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                    gap: 12px;
+                    padding: 10px 12px;
+                    border: 1px solid light-dark(#e5e7eb, #374151);
+                    border-radius: 8px;
+                    background: light-dark(#ffffff, #1f2937);
+                    margin-bottom: 8px;
+                ">
+                    <div>
+                        <strong>{label}</strong>
+                        <div style="
+                            font-size: 12px;
+                            color: light-dark(#6b7280, #9ca3af);
+                            word-break: break-all;
+                        ">
+                            {file_field.name}
+                        </div>
+                    </div>
+                    <a href="{resource_url}"
+                       target="_blank"
+                       style="
+                            color: light-dark(#2563eb, #60a5fa);
+                            font-weight: 600;
+                            text-decoration: none;
+                       ">
+                        {_("Open")}
+                    </a>
+                </div>
+            """)
+
+        if not rows:
+            return mark_safe(
+                '<div style="color: light-dark(#6b7280, #9ca3af);">'
+                f'{_("No resources uploaded.")}'
+                '</div>'
+            )
+
+        return mark_safe("".join(rows))
+
+    @admin.display(description=_("🔗 Links"))
+    def readonly_links(self, obj):
+        if not obj or not obj.pk:
+            return "-"
+
+        links = WaypointViewLink.objects.filter(waypoint=obj)
+
+        if not links.exists():
+            return mark_safe(
+                '<div style="color: light-dark(#6b7280, #9ca3af);">'
+                f'{_("No links uploaded.")}'
+                '</div>'
+            )
+
+        html = ['<ul style="margin:0; padding-left:18px;">']
+
+        for link in links:
+            if not link.link:
+                continue
+
+            html.append(f"""
+                <li style="margin-bottom: 6px;">
+                    <a href="{link.link}"
+                       target="_blank"
+                       style="
+                            color: light-dark(#2563eb, #60a5fa);
+                            font-weight: 600;
+                            text-decoration: none;
+                            word-break: break-all;
+                       ">
+                        {link.link}
+                    </a>
+                </li>
+            """)
+
+        html.append("</ul>")
+        return mark_safe("".join(html))
+
 
 class WaypointAdmin(UnfoldNestedStackedInline):
     model = Waypoint
@@ -30,11 +268,13 @@ class WaypointAdmin(UnfoldNestedStackedInline):
     
     def get_queryset(self, request):
         qs = super().get_queryset(request)
+
+        visible_tours = visible_tours_queryset(
+            request.user,
+            Tour.objects.all(),
+        )
         
-        if not request.user.is_superuser:
-            qs = qs.filter(tour__user=request.user)
-        
-        return qs
+        return qs.filter(tour__in=visible_tours).distinct()
     
     fieldsets = (
         (_('📍 Basic Information'), {
@@ -269,15 +509,39 @@ class WaypointAdmin(UnfoldNestedStackedInline):
         PlainLocationField: {"widget": LocationWidget},
     }
     
-    def has_delete_permission(self, request, obj=None):
-        has_permission = super().has_delete_permission(request, obj)
-        if not has_permission:
-            return False
+    # def has_delete_permission(self, request, obj=None):
+    #     has_permission = super().has_delete_permission(request, obj)
+    #     if not has_permission:
+    #         return False
+    #     if obj is None:
+    #         return True
+    #     if not request.user.is_superuser and obj.user != request.user:
+    #         return False
+    #     return True
+
+    def has_view_permission(self, request, obj=None):
         if obj is None:
             return True
-        if not request.user.is_superuser and obj.user != request.user:
-            return False
-        return True
+        return can_view_tour(request.user, obj)
+    
+    
+    def has_change_permission(self, request, obj=None):
+        if obj is None:
+            return True
+        return can_edit_tour(request.user, obj)
+    
+    
+    def has_add_permission(self, request, obj=None):
+        if obj is None:
+            return True
+        return can_edit_tour(request.user, obj)
+    
+    
+    def has_delete_permission(self, request, obj=None):
+        if obj is None:
+            return True
+        return can_edit_tour(request.user, obj)
+
     
     class Media:
         js = [
@@ -310,30 +574,78 @@ class WaypointViewImageAdmin(ModelAdmin):
             )
         return _("No image")
     
+    # def get_queryset(self, request):
+    #     qs = super().get_queryset(request)
+        
+    #     if not request.user.is_superuser:
+    #         qs = qs.filter(waypoint__tour__user=request.user)
+        
+    #     return qs
+    # 
     def get_queryset(self, request):
         qs = super().get_queryset(request)
+    
+        visible_tours = visible_tours_queryset(
+            request.user,
+            Tour.objects.all(),
+        )
+    
+        return qs.filter(waypoint__tour__in=visible_tours).distinct()
+
+    
+    # def formfield_for_foreignkey(self, db_field, request, **kwargs):
+    #     if db_field.name == "waypoint":
+    #         if not request.user.is_superuser:
+    #             kwargs["queryset"] = Waypoint.objects.filter(tour__user=request.user)
         
-        if not request.user.is_superuser:
-            qs = qs.filter(waypoint__tour__user=request.user)
-        
-        return qs
+    #     return super().formfield_for_foreignkey(db_field, request, **kwargs)
     
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
         if db_field.name == "waypoint":
-            if not request.user.is_superuser:
-                kwargs["queryset"] = Waypoint.objects.filter(tour__user=request.user)
-        
-        return super().formfield_for_foreignkey(db_field, request, **kwargs)
+            visible_tours = visible_tours_queryset(
+                request.user,
+                Tour.objects.all(),
+            )
+    
+            kwargs["queryset"] = Waypoint.objects.filter(
+                tour__in=visible_tours,
+            ).distinct()
+    
+        return super().formfield_for_foreignkey(db_field, request, **kwargs) 
+    
+    
+    # def has_delete_permission(self, request, obj=None):
+    #     has_permission = super().has_delete_permission(request, obj)
+    #     if not has_permission:
+    #         return False
+    #     if obj is None:
+    #         return True
+    #     if not request.user.is_superuser and obj.waypoint.tour.user != request.user:
+    #         return False
+    #     return True
+
+    def has_view_permission(self, request, obj=None):
+        if obj is None:
+            return True
+        return can_view_tour(request.user, obj.waypoint.tour)
+    
+    
+    def has_change_permission(self, request, obj=None):
+        if obj is None:
+            return True
+        return can_edit_tour(request.user, obj.waypoint.tour)
+    
     
     def has_delete_permission(self, request, obj=None):
         has_permission = super().has_delete_permission(request, obj)
         if not has_permission:
             return False
+    
         if obj is None:
             return True
-        if not request.user.is_superuser and obj.waypoint.tour.user != request.user:
-            return False
-        return True
+    
+        return can_edit_tour(request.user, obj.waypoint.tour)
+
 
 admin.site.register(WaypointViewImage, WaypointViewImageAdmin)
 
@@ -366,29 +678,77 @@ class WaypointViewLinkAdmin(ModelAdmin):
             )
         return _("No link")
     
+    # def get_queryset(self, request):
+    #     qs = super().get_queryset(request)
+        
+    #     if not request.user.is_superuser:
+    #         qs = qs.filter(waypoint__tour__user=request.user)
+        
+    #     return qs
+
     def get_queryset(self, request):
         qs = super().get_queryset(request)
-        
-        if not request.user.is_superuser:
-            qs = qs.filter(waypoint__tour__user=request.user)
-        
-        return qs
     
+        visible_tours = visible_tours_queryset(
+            request.user,
+            Tour.objects.all(),
+        )
+    
+        return qs.filter(waypoint__tour__in=visible_tours).distinct()
+
+    
+    # def formfield_for_foreignkey(self, db_field, request, **kwargs):
+    #     if db_field.name == "waypoint":
+    #         if not request.user.is_superuser:
+    #             kwargs["queryset"] = Waypoint.objects.filter(tour__user=request.user)
+        
+    #     return super().formfield_for_foreignkey(db_field, request, **kwargs)
+
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
         if db_field.name == "waypoint":
-            if not request.user.is_superuser:
-                kwargs["queryset"] = Waypoint.objects.filter(tour__user=request.user)
-        
+            visible_tours = visible_tours_queryset(
+                request.user,
+                Tour.objects.all(),
+            )
+    
+            kwargs["queryset"] = Waypoint.objects.filter(
+                tour__in=visible_tours,
+            ).distinct()
+    
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
+
+    
+    # def has_delete_permission(self, request, obj=None):
+    #     has_permission = super().has_delete_permission(request, obj)
+    #     if not has_permission:
+    #         return False
+    #     if obj is None:
+    #         return True
+    #     if not request.user.is_superuser and obj.waypoint.tour.user != request.user:
+    #         return False
+    #     return True
+
+    def has_view_permission(self, request, obj=None):
+        if obj is None:
+            return True
+        return can_view_tour(request.user, obj.waypoint.tour)
+    
+    
+    def has_change_permission(self, request, obj=None):
+        if obj is None:
+            return True
+        return can_edit_tour(request.user, obj.waypoint.tour)
+    
     
     def has_delete_permission(self, request, obj=None):
         has_permission = super().has_delete_permission(request, obj)
         if not has_permission:
             return False
+    
         if obj is None:
             return True
-        if not request.user.is_superuser and obj.waypoint.tour.user != request.user:
-            return False
-        return True
+    
+        return can_edit_tour(request.user, obj.waypoint.tour)
+
          
 admin.site.register(WaypointViewLink, WaypointViewLinkAdmin)

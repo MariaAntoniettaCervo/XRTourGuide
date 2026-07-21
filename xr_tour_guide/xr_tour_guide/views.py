@@ -6,6 +6,7 @@ from xr_tour_guide_core.models import Tour, Review, Waypoint
 from django.db.models import Avg, Count
 from django.core.paginator import Paginator
 import json
+from xr_tour_guide_core.admin.permission import visible_tours_queryset
 
 
 admin.site.index_title = "Dashboard"
@@ -18,16 +19,23 @@ class DashboardView(UnfoldModelAdminViewMixin, TemplateView):
 
 
 def dashboard_callback(request, context):
-    if request.user.is_superuser:
-        tour_filter = {}
-    else:
-        tour_filter = {"user": request.user}
+    # if request.user.is_superuser:
+    #     tour_filter = {}
+    # else:
+    #     tour_filter = {"user": request.user}
+
+    # base_queryset = Tour.objects.filter(
+    #     parent_tours__isnull=True,
+    #     is_subtour=False,
+    #     **tour_filter
+    # )
 
     base_queryset = Tour.objects.filter(
         parent_tours__isnull=True,
         is_subtour=False,
-        **tour_filter
     )
+
+    base_queryset = visible_tours_queryset(request.user, base_queryset)
 
     user_tours = (
         base_queryset

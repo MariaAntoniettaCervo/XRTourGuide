@@ -58,7 +58,7 @@ class NearbyToursNotifier extends StateNotifier<NearbyToursState> {
         tours = await _tourService.getNearbyTours(0, lat, lon, language: language);
       } else {
         debugPrint("Loading tours without location");
-        tours = await _tourService.getAllNearbyTours(0, language: language);
+        tours = await _tourService.getAllNearbyTours(0, language: language, limit: 5);
       }
       state = state.copyWith(
         tours: tours,

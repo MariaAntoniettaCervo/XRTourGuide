@@ -34,6 +34,8 @@ class ApiService {
   static const String centralizedUrl =
       'COMMUNITY_SERVER_URL'; // Sostituisci con l'URL del tuo server centrale
 
+
+      
   ApiService(this.ref) : _dio = Dio(BaseOptions(baseUrl: centralizedUrl)) {
     _dio.interceptors.add(
       InterceptorsWrapper(
@@ -406,10 +408,11 @@ class ApiService {
     }
   }
 
-  Future<Response> getAllNearbyTours(int timeout, {String? baseUrl, String? language}) async {
+  Future<Response> getAllNearbyTours(int timeout, {String? baseUrl, String? language, int? limit}) async {
     try {
       final queryParameters = <String, dynamic>{
         if (language != null && language.isNotEmpty) 'language': language,
+        if (limit != null) 'num_tours': limit,
       };
   
       final options = timeout > 0
@@ -439,29 +442,6 @@ class ApiService {
     String? baseUrl,
     String? language,
   }) async {
-    // try {
-    //   Response response;
-    //   if (timeout > 0) {
-    //     final options = _getOptions(
-    //       baseUrl: baseUrl,
-    //       options: Options(sendTimeout: Duration(seconds: timeout)),
-    //     );
-    //     response = await dio.get(
-    //       "/tour_list/?lon=$longitude&lat=$latitude&num_tours=5",
-    //       options: options,
-    //     );
-    //   } else {
-    //     final options = _getOptions(baseUrl: baseUrl);
-    //     response = await dio.get(
-    //       '/tour_list/?lon=$longitude&lat=$latitude&num_tours=5',
-    //       options: options,
-    //     );
-    //   }
-    //   return response;
-    // } catch (e) {
-    //   debugPrint('Failed to fetch tours: $e');
-    //   rethrow;
-    // }
     try {
       final queryParameters = <String, dynamic>{
         'lon': longitude,

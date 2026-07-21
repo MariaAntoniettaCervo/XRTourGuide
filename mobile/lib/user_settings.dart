@@ -277,11 +277,15 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen> {
   }
 
   // Save language selection
-  void _saveLanguageSelection(Locale selectedLocale) {
-    context.setLocale(selectedLocale);
+  Future<void> _saveLanguageSelection(Locale selectedLocale) async {
+    await context.setLocale(selectedLocale);
 
-    ref.invalidate(nearbyToursProvider); // Invalidate nearby tours to reload with new language
-    ref.invalidate(categoriesProvider); // Invalidate categories to reload with new language
+    ref.invalidate(
+      nearbyToursProvider,
+    ); // Invalidate nearby tours to reload with new language
+    ref.invalidate(
+      categoriesProvider,
+    ); // Invalidate categories to reload with new language
 
     unawaited(
       _analytics.logEvent(
@@ -289,6 +293,8 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen> {
         parameters: {'language': selectedLocale.toString()},
       ),
     );
+
+    if (!mounted) return;
 
     setState(() {
       _currentScreen = ProfileScreenState.main;
@@ -356,7 +362,7 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen> {
 
     ref.invalidate(nearbyToursProvider);
     ref.invalidate(categoriesProvider);
-    
+
     if (!mounted) return;
 
     Navigator.of(context).pushAndRemoveUntil(

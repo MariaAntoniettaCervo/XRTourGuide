@@ -48,6 +48,9 @@ class _TravelExplorerScreenState extends ConsumerState<TravelExplorerScreen>
   bool _isCheckingConnection = true;
   late StreamSubscription<List<ConnectivityResult>> _connectivitySubscription;
 
+  String? _lastLoadedLanguage;
+  String? _lastLoadedBaseUrl;
+
   @override
   void initState() {
     super.initState();
@@ -121,8 +124,14 @@ class _TravelExplorerScreenState extends ConsumerState<TravelExplorerScreen>
 
   @override
   void didPopNext() {
+    final currentLanguage = context.locale.languageCode.toLowerCase();
+    final currentBaseUrl = _tourService.apiService.getCurrentBaseUrl();
+
+    final shouldForceReload =
+        _lastLoadedLanguage != currentLanguage ||
+        _lastLoadedBaseUrl != currentBaseUrl;
     _updateConnectionStatus(
-      forceReload: false,
+      forceReload: shouldForceReload,
     ); // Non forzare il reload, controlla solo connessione
     _loadOfflineTours();
     super.didPopNext();
@@ -139,6 +148,10 @@ class _TravelExplorerScreenState extends ConsumerState<TravelExplorerScreen>
     if (!_isOnline) return;
 
     final language = context.locale.languageCode.toLowerCase();
+    final baseUrl = _tourService.apiService.getCurrentBaseUrl();
+
+    _lastLoadedLanguage = language;
+    _lastLoadedBaseUrl = baseUrl;
 
     // Carica categorie (il provider gestisce il caching se non invalidato)
     if (forceRefresh) {
@@ -146,14 +159,27 @@ class _TravelExplorerScreenState extends ConsumerState<TravelExplorerScreen>
     }
 
     // Carica tour
-    debugPrint("Loading online tours with forceRefresh=$forceRefresh, language=$language");
-    Position? position = await _getCurrentPosition();
-    ref.read(nearbyToursProvider.notifier)
+    debugPrint(
+      "Loading online tours with forceRefresh=$forceRefresh, language=$language",
+    );
+
+    unawaited(
+      ref
+          .read(nearbyToursProvider.notifier)
+          .loadTours(forceRefresh: forceRefresh, language: language),
+    );
+
+    final position = await _getCurrentPosition().timeout(const Duration(seconds: 2), onTimeout: () => null);
+
+    if (!mounted || position == null) return;
+    
+    await ref
+        .read(nearbyToursProvider.notifier)
         .loadTours(
           forceRefresh: forceRefresh,
-          lat: position?.latitude,
-          lon: position?.longitude,
-          language: language
+          lat: position.latitude,
+          lon: position.longitude,
+          language: language,
         );
   }
 

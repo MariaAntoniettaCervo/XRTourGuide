@@ -177,6 +177,27 @@ class Tour(models.Model):
 
         super().save(*args, **kwargs)
 
+
+class TourCollaboratorRole(models.TextChoices):
+    EDITOR = "editor", _("Editor")
+    VIEWER = "viewer", _("Viewer")
+
+class TourCollaborator(models.Model):
+    tour = models.ForeignKey(Tour, on_delete=models.CASCADE, related_name='collaborators', verbose_name=_("Tour"))
+    user = models.ForeignKey(get_user_model(), on_delete=models.CASCADE, related_name='tour_collaborations', verbose_name=_("User"))
+    role = models.CharField(max_length=20, choices=TourCollaboratorRole.choices, default=TourCollaboratorRole.VIEWER, verbose_name=_("Role"))
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name=_("Created At"))
+    
+    class Meta:
+        db_table = "TourCollaborator"
+        unique_together = ('tour', 'user')
+        verbose_name = _("Tour Collaborator")
+        verbose_name_plural = _("Tour Collaborators")
+
+    def __str__(self):
+        return f"{self.user.username} - {self.tour.title} ({self.role})"
+
+
 def normalize_waypoint_positions_for_tour(tour):
     waypoints = list(tour.waypoints.order_by("-is_preliminary_info", "position", "id"))
 

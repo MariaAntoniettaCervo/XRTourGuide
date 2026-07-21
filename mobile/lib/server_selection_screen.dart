@@ -91,7 +91,7 @@ class _WelcomeScreenState extends ConsumerState<WelcomeScreen> {
 
     final available = await _apiService.pingServer(
       urlToCheck: _apiService.getCurrentBaseUrl(),
-      timeout: const Duration(seconds: 5),
+      timeout: const Duration(seconds: 1),
     );
 
     if (!mounted) return;

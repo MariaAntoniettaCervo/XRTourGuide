@@ -73,10 +73,11 @@ class TourForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         request = kwargs.pop("request", None)
         super().__init__(*args, **kwargs)
-        
-        self.fields['sub_tours'].widget.attrs.update({
-            'class': 'unfold-multiselect flex flex-col gap-2 p-2 border rounded-lg bg-white shadow-sm'
-        })
+
+        if 'sub_tours' in self.fields:
+            self.fields['sub_tours'].widget.attrs.update({
+                'class': 'unfold-multiselect flex flex-col gap-2 p-2 border rounded-lg bg-white shadow-sm'
+            })
         
         if 'title' in self.fields:
             self.fields['title'].widget.attrs['placeholder'] = _('E.g.: Historic Center Tour of Rome')
@@ -94,7 +95,9 @@ class TourForm(forms.ModelForm):
             self.fields['place'].widget.attrs['placeholder'] = _('E.g.: Rome')
 
         if request and "_popup" in request.GET and not self.instance.pk:
-            self.fields['category'].initial = 'INDOOR'
-            self.fields['category'].disabled = True
-            self.fields['category'].widget = forms.HiddenInput()
-            self.fields['is_subtour'].initial = True
+            if 'category' in self.fields:
+                self.fields['category'].initial = 'INDOOR'
+                self.fields['category'].disabled = True
+                self.fields['category'].widget = forms.HiddenInput()
+            if 'is_subtour' in self.fields:
+                self.fields['is_subtour'].initial = True

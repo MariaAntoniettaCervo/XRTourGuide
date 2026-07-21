@@ -33,9 +33,9 @@ class TourService {
     }
   }
 
-    Future<List<Tour>> getAllNearbyTours(int timeout, {String? language}) async {
+    Future<List<Tour>> getAllNearbyTours(int timeout, {String? language, int? limit}) async {
     try {
-      final response = await apiService.getAllNearbyTours(timeout, baseUrl: apiService.getCurrentBaseUrl(), language: language);
+      final response = await apiService.getAllNearbyTours(timeout, baseUrl: apiService.getCurrentBaseUrl(), language: language, limit:limit);
       if (response.statusCode == 200) {
         final data = response.data as List;
         return data.map((tour) => Tour.fromJson(tour)).toList();

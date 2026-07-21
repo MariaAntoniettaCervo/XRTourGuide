@@ -1,6 +1,8 @@
 FROM python:3.12
-
 WORKDIR /workspace
+
+ARG USER_ID=1000
+ARG GROUP_ID=1000
 
 COPY . .
 
@@ -12,10 +14,18 @@ RUN apt-get update && \
     && apt-get install -y ca-certificates \
     && update-ca-certificates
 
+
+RUN groupadd -g ${GROUP_ID} appgroup && \
+    useradd -u ${USER_ID} -g appgroup -m appuser
+
+RUN chown -R appuser:appgroup /workspace
+    
+USER appuser
+
 RUN pip install gunicorn
 
 CMD sh -c "\
-    python manage.py makemigrations && \
+    # python manage.py makemigrations && \
     python manage.py migrate && \
     python manage.py init_groups && \
     python manage.py collectstatic --noinput && \

@@ -14,6 +14,10 @@ import "package:easy_localization/easy_localization.dart";
 import 'services/analytics_service.dart';
 import 'utils/responsive.dart';
 import 'utils/platform_page_route.dart';
+import 'server_selection_screen.dart';
+import 'services/local_state_service.dart';
+import 'providers/home_providers.dart';
+
 
 
 // Enum to track which profile screen is currently active
@@ -579,6 +583,146 @@ class _UserDetailScreenState extends ConsumerState<UserDetailScreen> {
     );
   }
 
+  Future<void> _changeServerForGuest(BuildContext context) async {
+    await ref.read(localStateServiceProvider).clearSelectedServer();
+  
+    ref.invalidate(nearbyToursProvider);
+    ref.invalidate(categoriesProvider);
+  
+    if (!mounted) return;
+  
+    Navigator.of(context).pushAndRemoveUntil(
+      platformPageRoute(
+        builder: (_) => const WelcomeScreen(
+          isGuest: true,
+          initialErrorMessage: null,
+        ),
+      ),
+      (route) => false,
+    );
+  }
+  
+  Future<void> _showGuestLanguageSelector(BuildContext context) async {
+    final languages = [
+      {
+        "name": "English(US)",
+        "locale": const Locale('en', 'US'),
+        "flag": "🇺🇸",
+      },
+      {
+        "name": "Italiano",
+        "locale": const Locale('it', 'IT'),
+        "flag": "🇮🇹",
+      },
+    ];
+  
+    await showModalBottomSheet(
+      context: context,
+      backgroundColor: AppColors.background,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (sheetContext) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'language'.tr(),
+                  style: TextStyle(
+                    fontSize: context.r.sp(18),
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                ...languages.map((language) {
+                  final locale = language["locale"] as Locale;
+                  final isSelected = context.locale == locale;
+  
+                  return ListTile(
+                    leading: Text(
+                      language["flag"] as String,
+                      style: const TextStyle(fontSize: 24),
+                    ),
+                    title: Text(language["name"] as String),
+                    trailing: isSelected
+                        ? const Icon(Icons.check, color: AppColors.primary)
+                        : null,
+                    onTap: () async {
+                      Navigator.of(sheetContext).pop();
+  
+                      await context.setLocale(locale);
+  
+                      ref.invalidate(nearbyToursProvider);
+                      ref.invalidate(categoriesProvider);
+  
+                      unawaited(
+                        _analytics.logEvent(
+                          name: 'change_language',
+                          parameters: {'language': locale.toString()},
+                        ),
+                      );
+  
+                      if (!mounted) return;
+  
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('language_updated'.tr()),
+                          backgroundColor: AppColors.success,
+                        ),
+                      );
+                    },
+                  );
+                }),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildGuestActionButton({
+    required String text,
+    required IconData icon,
+    required VoidCallback onPressed,
+    bool primary = false,
+  }) {
+    return SizedBox(
+      width: double.infinity,
+      height: 50,
+      child: primary
+          ? ElevatedButton.icon(
+              onPressed: onPressed,
+              icon: Icon(icon),
+              label: Text(text),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(25),
+                ),
+              ),
+            )
+          : OutlinedButton.icon(
+              onPressed: onPressed,
+              icon: Icon(icon),
+              label: Text(text),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppColors.primary,
+                side: const BorderSide(color: AppColors.primary),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(25),
+                ),
+              ),
+            ),
+    );
+  }
+
+
   // Build the guest profile screen
   Widget _buildGuestProfileScreen(BuildContext context) {
     return Scaffold(
@@ -648,15 +792,23 @@ class _UserDetailScreenState extends ConsumerState<UserDetailScreen> {
                         SizedBox(
                           width: double.infinity,
                           height: 50,
-                          child: ElevatedButton(
+                          child: ElevatedButton.icon(
                             onPressed: () {
-                              // TODO: Implement Log In navigation
                               Navigator.of(context).pushAndRemoveUntil(
                                 platformPageRoute(
                                   builder: (context) => const AuthFlowScreen(),
                                 ),
                                 (route) => false,
-                              );                            },
+                              );
+                            },
+                            icon: const Icon(Icons.login),
+                            label: Text(
+                              'login'.tr(),
+                              style: TextStyle(
+                                fontSize: context.r.sp(16),
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
                             style: ElevatedButton.styleFrom(
                               backgroundColor: AppColors.primary,
                               foregroundColor: Colors.white,
@@ -664,40 +816,58 @@ class _UserDetailScreenState extends ConsumerState<UserDetailScreen> {
                                 borderRadius: BorderRadius.circular(25),
                               ),
                             ),
-                            child: Text(
-                              'login'.tr(), // As shown in profile_guest.jpg
+                          ),
+                        ),
+                  
+                        const SizedBox(height: 16),
+                  
+                        SizedBox(
+                          width: double.infinity,
+                          height: 50,
+                          child: OutlinedButton.icon(
+                            onPressed: () => _showGuestLanguageSelector(context),
+                            icon: const Icon(Icons.language),
+                            label: Text(
+                              'app_language_title'.tr(),
                               style: TextStyle(
                                 fontSize: context.r.sp(16),
                                 fontWeight: FontWeight.bold,
                               ),
                             ),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: AppColors.primary,
+                              side: const BorderSide(color: AppColors.primary),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(25),
+                              ),
+                            ),
                           ),
                         ),
+                  
                         const SizedBox(height: 16),
-                        // SizedBox(
-                        //   width: double.infinity,
-                        //   height: 50,
-                        //   child: ElevatedButton(
-                        //     onPressed: () {
-                        //       // TODO: Implement Registrati navigation (Sign Up)
-                        //       debugPrint('Navigate to Registrati (Sign Up) screen');
-                        //     },
-                        //     style: ElevatedButton.styleFrom(
-                        //       backgroundColor: AppColors.primary,
-                        //       foregroundColor: Colors.white,
-                        //       shape: RoundedRectangleBorder(
-                        //         borderRadius: BorderRadius.circular(25),
-                        //       ),
-                        //     ),
-                        //     child: const Text(
-                        //       'Registrati', // As shown in profile_guest.jpg
-                        //       style: TextStyle(
-                        //         fontSize: context.r.sp(16),
-                        //         fontWeight: FontWeight.bold,
-                        //       ),
-                        //     ),
-                        //   ),
-                        // ),
+                  
+                        SizedBox(
+                          width: double.infinity,
+                          height: 50,
+                          child: OutlinedButton.icon(
+                            onPressed: () => _changeServerForGuest(context),
+                            icon: const Icon(Icons.dns_outlined),
+                            label: Text(
+                              'change_server'.tr(),
+                              style: TextStyle(
+                                fontSize: context.r.sp(16),
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: AppColors.primary,
+                              side: const BorderSide(color: AppColors.primary),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(25),
+                              ),
+                            ),
+                          ),
+                        ),
                       ],
                     ),
                   ),

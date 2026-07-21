@@ -2054,26 +2054,26 @@ class _ARCameraScreenState extends ConsumerState<ARCameraScreen>
     // await WidgetsBinding.instance.endOfFrame;
     // await Future.delayed(const Duration(milliseconds: 50));
 
-    // --- TEST CODE: BYPASS INFERENCE ---
-    // Simula un ritardo di scansione
-    await Future.delayed(const Duration(seconds: 2));
+    // // --- TEST CODE: BYPASS INFERENCE ---
+    // // Simula un ritardo di scansione
+    // await Future.delayed(const Duration(seconds: 2));
 
-    // Usa il primo waypoint disponibile o un ID di default
-    int waypointId = _waypoints.isNotEmpty ? _waypoints.first.id : 1;
+    // // Usa il primo waypoint disponibile o un ID di default
+    // int waypointId = _waypoints.isNotEmpty ? _waypoints.first.id : 1;
 
-    // Simula la disponibilità di tutte le risorse
-    Map<String, dynamic> availableResources = {
-      "readme": 1,
-      "links": 1,
-      "images": 1,
-      "video": 1,
-      "pdf": 1,
-      "audio": 1,
-    };
+    // // Simula la disponibilità di tutte le risorse
+    // Map<String, dynamic> availableResources = {
+    //   "readme": 1,
+    //   "links": 1,
+    //   "images": 1,
+    //   "video": 1,
+    //   "pdf": 1,
+    //   "audio": 1,
+    // };
 
-    _handleRecognitionSuccess(waypointId, availableResources, widget.isOffline);
-    return;
-    // -----------------------------------
+    // _handleRecognitionSuccess(waypointId, availableResources, widget.isOffline);
+    // return;
+    // // -----------------------------------
 
     try {
       Uint8List? bytes;
