@@ -1,0 +1,4 @@
+{
+    "tts_engine": "coqui",
+    "llm_model_name": "llama3.1:8b"
+}

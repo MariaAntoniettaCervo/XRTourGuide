@@ -165,6 +165,29 @@ services:
     networks:
       - backend_net
 
+  ai_backend:
+    build:
+      context: ../ai_optimization_backend
+      dockerfile: Dockerfile
+    container_name: ai_backend_tour_guide
+    environment:
+      - PYTHONUNBUFFERED=1
+      - OLLAMA_HOST=http://ollama:11434
+    env_file:
+      - .env
+    ports:
+      - "8000:8000"
+    networks:
+      - backend_net
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama_tour_guide
+    volumes:
+      - ollama_data:/root/.ollama
+    networks:
+      - backend_net
+
   # certbot:
   #   image: certbot/certbot
   #   container_name: certbot
@@ -207,3 +230,4 @@ services:
 volumes:
   mysql_data_xr_tour_guide:
   minio_data:
+  ollama_data:

@@ -1,0 +1,37 @@
+# --- Virtual Environments (TUTTI) ---
+venv/
+env/
+.env
+*_venv/
+
+# --- File Python ---
+__pycache__/
+*.pyc
+
+# --- File Audio e Output ---
+*.wav
+*.mp3
+generated_audio/
+temp_audio/
+
+# --- ECCEZIONI (Whitelist) ---
+!ref_voice.mp3
+!ref_voice.wav
+
+# --- Modelli AI Pesanti---
+*.onnx
+*.bin
+*.pt
+*.pth
+*.ckpt
+*.gguf
+*.dll
+*.exe
+*.so
+
+# --- Cartelle di Cache e Build ---
+.vscode/
+bin/
+dist/
+build/
+

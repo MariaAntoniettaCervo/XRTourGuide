@@ -302,3 +302,102 @@ def generate_offline_bundle(tour_id):
         
         print(f"Offline bundle generation failed for tour {tour_id}: {e}")
         return {"ok": False, "error": str(e)}
+    
+# --- Generazione audio (modulo AI XRTourGuide-AI-Backend) ---
+
+AI_BACKEND_ENDPOINT = os.getenv("AI_BACKEND_ENDPOINT", "http://ai_backend:8000")
+AUDIO_CALLBACK_ENDPOINT = os.getenv("AUDIO_CALLBACK_ENDPOINT", "http://web:8001/ai-backend/generate-audio/callback/")
+
+
+@shared_task(bind=True, max_retries=3, default_retry_delay=10, queue='api_tasks')
+def generate_waypoint_audio(self, waypoint_id, text, tts_engine="coqui-xtts"):
+    """
+    Avvia la generazione audio sul modulo AI e si disinteressa del risultato:
+    sarà il modulo stesso a richiamare AUDIO_CALLBACK_ENDPOINT quando pronto,
+    esattamente come ai_training richiama CALLBACK_ENDPOINT a fine training.
+    """
+    from xr_tour_guide_core.models import Waypoint
+
+    try:
+        waypoint = Waypoint.objects.get(pk=waypoint_id)
+    except Waypoint.DoesNotExist:
+        print(f"generate_waypoint_audio: waypoint {waypoint_id} non trovato")
+        return f"Waypoint {waypoint_id} does not exist."
+
+    payload = {
+        "text": text,
+        "waypoint_id": str(waypoint.pk),
+        "callback_url": AUDIO_CALLBACK_ENDPOINT,
+        "tts_engine": tts_engine,
+    }
+
+    try:
+        url = f"{AI_BACKEND_ENDPOINT}/generate-audio"
+        headers = {"Content-type": "application/json"}
+        response = requests.post(url, headers=headers, json=payload, timeout=15)
+        print("Audio generation started, status code:", response.status_code)
+
+        if response.status_code not in (200, 202):
+            raise self.retry(exc=Exception(f"Modulo AI ha risposto {response.status_code}"))
+
+        return f"Generazione audio avviata per waypoint {waypoint_id}"
+
+    except Exception as e:
+        print(f"Errore avvio generazione audio per waypoint {waypoint_id}: {e}")
+        raise self.retry(exc=e)
+    
+    
+# --- Ottimizzazione testi (titolo/descrizione) via LLM ---
+ 
+from django.core.cache import caches
+ 
+AI_JOB_CACHE_TTL_SECONDS = 600  # 10 minuti: tempo generoso per un LLM su CPU + margine di polling
+ 
+ 
+@shared_task(bind=True, max_retries=2, default_retry_delay=10, queue='api_tasks')
+def optimize_text_task(self, job_id, kind, payload):
+    """
+    kind: 'title' o 'description'.
+    payload: dict già pronto per il modulo AI (es. {"original_title": "..."}).
+ 
+    Nessun timeout web qui: il task gira nel worker Celery, non in una richiesta
+    HTTP, quindi non è soggetto ai limiti di nginx/gunicorn che ci hanno bloccato.
+    """
+    cache = caches["redis"]
+    endpoint = "optimize/title" if kind == "title" else "optimize/description"
+ 
+    try:
+        response = requests.post(
+            f"{AI_BACKEND_ENDPOINT}/{endpoint}",
+            json=payload,
+            timeout=300,  # generoso: qui non costa nulla aspettare, nessuno è bloccato
+        )
+        response.raise_for_status()
+        cache.set(f"ai_job:{job_id}", {"status": "ready", "data": response.json()}, timeout=AI_JOB_CACHE_TTL_SECONDS)
+        return f"Job {job_id} completato"
+ 
+    except Exception as e:
+        print(f"Errore optimize_text_task ({kind}, job {job_id}): {e}")
+        cache.set(f"ai_job:{job_id}", {"status": "error", "error": str(e)}, timeout=AI_JOB_CACHE_TTL_SECONDS)
+        raise self.retry(exc=e)
+
+# --- Calcolo chunks TTS al salvataggio di Tour/Waypoint ---
+ 
+@shared_task(queue='api_tasks')
+def compute_chunks_task(text):
+    """
+    Chiamata dai signal post_save di Tour/Waypoint (vedi signals_ai_backend.py).
+    Nessuna attesa lato admin: gira in background, non blocca il salvataggio.
+    """
+    try:
+        response = requests.post(
+            f"{AI_BACKEND_ENDPOINT}/compute-chunks",
+            json={"text": text},
+            timeout=30,
+        )
+        response.raise_for_status()
+        print(f"compute_chunks_task: chunks calcolati per testo di {len(text)} caratteri")
+    except Exception as e:
+        # Non critico: se fallisce, /generate-audio ricalcolerà i chunks al volo
+        # (fallback già esistente in background_audio_task). Solo un log.
+        print(f"compute_chunks_task: errore (non bloccante): {e}")

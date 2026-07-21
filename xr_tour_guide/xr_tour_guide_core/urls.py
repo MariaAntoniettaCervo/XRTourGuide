@@ -5,6 +5,7 @@ from .views.tour_views import *
 from .views.waypoint_views import *
 from .views.review_views import *
 from .views.control_views import *
+from .views.ai_backend_views import *
 from drf_yasg.views import get_schema_view
 from drf_yasg import openapi
 from rest_framework import permissions
@@ -60,4 +61,11 @@ urlpatterns = [
     path('increment-reports/', increment_reports, name="increment_reports"),
     path('has_reviewed_tour/<int:tour_id>/', has_reviewed_tour, name="has_reviewed_tour"),
     path("download_offline_bundle/<int:tour_id>/", download_offline_bundle, name="download_offline_bundle"),
+
+    path("ai-backend/optimize-title/start/", optimize_title_start, name="ai_backend_optimize_title_start"),
+    path("ai-backend/optimize-description/start/", optimize_description_start, name="ai_backend_optimize_description_start"),
+    path("ai-backend/optimize-text/status/", optimize_text_status, name="ai_backend_optimize_text_status"),
+    path("ai-backend/generate-audio/start/", generate_audio_start, name="ai_backend_generate_audio_start"),
+    path("ai-backend/generate-audio/status/", generate_audio_status, name="ai_backend_generate_audio_status"),
+    path("ai-backend/generate-audio/callback/", generate_audio_callback, name="ai_backend_generate_audio_callback"),
 ]

@@ -85,6 +85,7 @@ class TourAdmin(nested_admin.NestedModelAdmin, ModelAdmin):
             'admin/js/fix_minio_preview.js',
             'admin/js/loader.js',
             'admin/js/subtour_popup.js',
+            'admin/js/ai_backend_buttons.js',
         ]
         css = {
             'all': [
