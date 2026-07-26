@@ -68,4 +68,9 @@ urlpatterns = [
     path("ai-backend/generate-audio/start/", generate_audio_start, name="ai_backend_generate_audio_start"),
     path("ai-backend/generate-audio/status/", generate_audio_status, name="ai_backend_generate_audio_status"),
     path("ai-backend/generate-audio/callback/", generate_audio_callback, name="ai_backend_generate_audio_callback"),
+    path("ai-backend/generate-audio/preview/", generate_audio_preview, name="ai_backend_generate_audio_preview"),
+    path("ai-backend/generate-audio/discard/", generate_audio_discard, name="ai_backend_generate_audio_discard"),
+    path("ai-backend/optimize-markdown/start/", optimize_markdown_start, name="ai_backend_optimize_markdown_start"),
+    path("ai-backend/waypoint-audio-player/", waypoint_audio_player, name="ai_backend_waypoint_audio_player"),
+    path("ai-backend/optimize-text/cancel/", optimize_text_cancel, name="ai_backend_optimize_text_cancel"),
 ]

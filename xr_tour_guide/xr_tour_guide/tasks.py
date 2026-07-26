@@ -200,8 +200,6 @@ def fail_stuck_builds():
             
     cromo_poi = None
     try:
-        # timeout_minutes = 10 #18 * 60 # 18 hours
-        # threshold = timezone.now() - timedelta(minutes=1)
         try:
             configured_timeout = int(os.getenv("BUILD_TIMEOUT_MINUTES", 30))
         except ValueError:
@@ -329,6 +327,7 @@ def generate_waypoint_audio(self, waypoint_id, text, tts_engine="coqui-xtts"):
         "waypoint_id": str(waypoint.pk),
         "callback_url": AUDIO_CALLBACK_ENDPOINT,
         "tts_engine": tts_engine,
+        "retry": True,  # ogni click esplicito deve ritentare, anche dopo un errore precedente
     }
 
     try:
@@ -345,27 +344,35 @@ def generate_waypoint_audio(self, waypoint_id, text, tts_engine="coqui-xtts"):
     except Exception as e:
         print(f"Errore avvio generazione audio per waypoint {waypoint_id}: {e}")
         raise self.retry(exc=e)
-    
-    
-# --- Ottimizzazione testi (titolo/descrizione) via LLM ---
- 
+
+
+# --- Ottimizzazione testi (titolo/descrizione/markdown) via LLM ---
+
 from django.core.cache import caches
- 
+
 AI_JOB_CACHE_TTL_SECONDS = 600  # 10 minuti: tempo generoso per un LLM su CPU + margine di polling
- 
- 
+
+# Nota: "markdown" usa un URL diverso dagli altri due -> /optimize-markdown
+# (trattino), non /optimize/markdown (slash) come ci si aspetterebbe per coerenza.
+_OPTIMIZE_ENDPOINTS = {
+    "title": "optimize/title",
+    "description": "optimize/description",
+    "markdown": "optimize-markdown",
+}
+
+
 @shared_task(bind=True, max_retries=2, default_retry_delay=10, queue='api_tasks')
 def optimize_text_task(self, job_id, kind, payload):
     """
-    kind: 'title' o 'description'.
+    kind: 'title', 'description' o 'markdown'.
     payload: dict già pronto per il modulo AI (es. {"original_title": "..."}).
- 
+
     Nessun timeout web qui: il task gira nel worker Celery, non in una richiesta
     HTTP, quindi non è soggetto ai limiti di nginx/gunicorn che ci hanno bloccato.
     """
     cache = caches["redis"]
-    endpoint = "optimize/title" if kind == "title" else "optimize/description"
- 
+    endpoint = _OPTIMIZE_ENDPOINTS.get(kind, "optimize/title")
+
     try:
         response = requests.post(
             f"{AI_BACKEND_ENDPOINT}/{endpoint}",
@@ -375,14 +382,15 @@ def optimize_text_task(self, job_id, kind, payload):
         response.raise_for_status()
         cache.set(f"ai_job:{job_id}", {"status": "ready", "data": response.json()}, timeout=AI_JOB_CACHE_TTL_SECONDS)
         return f"Job {job_id} completato"
- 
+
     except Exception as e:
         print(f"Errore optimize_text_task ({kind}, job {job_id}): {e}")
         cache.set(f"ai_job:{job_id}", {"status": "error", "error": str(e)}, timeout=AI_JOB_CACHE_TTL_SECONDS)
         raise self.retry(exc=e)
 
+
 # --- Calcolo chunks TTS al salvataggio di Tour/Waypoint ---
- 
+
 @shared_task(queue='api_tasks')
 def compute_chunks_task(text):
     """
@@ -401,3 +409,28 @@ def compute_chunks_task(text):
         # Non critico: se fallisce, /generate-audio ricalcolerà i chunks al volo
         # (fallback già esistente in background_audio_task). Solo un log.
         print(f"compute_chunks_task: errore (non bloccante): {e}")
+
+# --- Conferma anteprima audio in sospeso (rete di sicurezza al salvataggio) ---
+
+@shared_task(queue='api_tasks')
+def commit_pending_audio_task(waypoint_id):
+    """
+    Esegue _commit_audio_preview in un processo Celery separato, con una pila
+    di chiamate "fresca" — evita l'errore di ricorsione eccessiva che si
+    presenta se lo stesso lavoro (scrittura su MinIO via boto3) viene fatto
+    dentro la richiesta Django già annidata in profondità (admin, formset
+    nested, mixin di unfold, signal post_save).
+    """
+    from xr_tour_guide_core.models import Waypoint
+    from xr_tour_guide_core.views.ai_backend_views import _commit_audio_preview
+
+    try:
+        waypoint = Waypoint.objects.get(pk=waypoint_id)
+    except Waypoint.DoesNotExist:
+        print(f"commit_pending_audio_task: waypoint {waypoint_id} non trovato")
+        return
+
+    try:
+        _commit_audio_preview(waypoint)
+    except Exception as e:
+        print(f"commit_pending_audio_task: errore (non bloccante): {e}")

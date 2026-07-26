@@ -2,18 +2,16 @@ from app.llm.factory import LLMFactory
 from app.schemas import MarkdownFixResponse
 import logging
 
-def fix_markdown(text: str, tone: str, model_name: str = "llama3.1:8b") -> MarkdownFixResponse:
+def fix_markdown(text: str, model_name: str = "llama3.1:8b") -> MarkdownFixResponse:
     """
     Esegue un proofreading intelligente del testo mantenendo la formattazione Markdown.
 
     Questa funzione agisce come un "Correttore di Bozze" automatico. Analizza il testo in input,
-    corregge errori grammaticali e sintattici, adatta il tono di voce richiesto, ma
-    **protegge rigorosamente la struttura Markdown** (bold, headers, liste) per evitare
+    corregge errori grammaticali e sintattici, ma **protegge rigorosamente la struttura Markdown** (bold, headers, liste) per evitare
     di rompere il rendering nel frontend.
 
     Args:
         text (str): Il testo originale (può contenere sintassi Markdown come **, #, -).
-        tone (str): Il tono desiderato per la revisione (es. "professionale", "amichevole", "accademico").
         model_name (str, optional): Il modello LLM da utilizzare (default: "llama3.1:8b").
 
     Returns:
@@ -24,14 +22,15 @@ def fix_markdown(text: str, tone: str, model_name: str = "llama3.1:8b") -> Markd
             - error_message: Dettaglio dell'errore (se presente).
 
     Behavior:
-        - **Format Preservation:** Il System Prompt istruisce esplicitamente il modello a non toccare i simboli Markdown.
+        - **Format Preservation:** Il System Prompt istruisce esplicitamente il modello a non modificare i simboli Markdown, 
+            correggendo solo gli errori di grammatica e sintassi del markdown.
         - **Error Mapping:** Traduce errori tecnici (es. "Connection refused") in messaggi user-friendly.
         - **Graceful Degradation:** In caso di crash dell'AI o di timeout, la funzione NON solleva eccezione
           ma restituisce il testo originale (`fixed_text = text`) con `success=False`.
           Questo garantisce che l'utente non perda mai il suo lavoro.
     """
 
-    print(f"FIXING MARKDOWN (Tone: {tone})...")
+    print(f"FIXING MARKDOWN...")
 
     # --- 1. SYSTEM PROMPT (Role & Constraints Pattern) ---
     # Definisce il ruolo di Editor e impone la regola ferrea di preservare il Markdown.
@@ -40,9 +39,8 @@ def fix_markdown(text: str, tone: str, model_name: str = "llama3.1:8b") -> Markd
         "Il tuo compito è riscrivere il testo fornito dall'utente rispettando queste regole:\n"
         "1. Correggi errori grammaticali e di sintassi.\n"
         "2. Migliora la fluidità del testo mantenendo il significato originale.\n"
-        "3. Mantieni o migliora la formattazione MARKDOWN (grassetto, elenchi, titoli).\n"
+        "3. Mantieni o correggi se necessario la formattazione MARKDOWN (grassetto, elenchi, titoli).\n"
         "4. Non aggiungere commenti, introduzioni o saluti. Restituisci SOLO il testo corretto.\n"
-        f"5. Adotta un tono: {tone}."
     )
 
     try:

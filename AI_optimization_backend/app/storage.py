@@ -156,3 +156,19 @@ def get_json_from_minio(object_name: str) -> dict:
         if response:
             response.close()
             response.release_conn()
+
+def get_file_bytes(object_name: str) -> bytes:
+    """
+    Scarica un file da MinIO e ne restituisce i byte grezzi.
+    Stesso pattern di get_json_from_minio, ma senza parsing JSON: utile per
+    rileggere un audio già presente in cache (es. per re-inviare il callback
+    a Django quando la generazione è già stata fatta in passato).
+    """
+    response = None
+    try:
+        response = client.get_object(global_settings.minio_bucket, object_name)
+        return response.read()
+    finally:
+        if response:
+            response.close()
+            response.release_conn()

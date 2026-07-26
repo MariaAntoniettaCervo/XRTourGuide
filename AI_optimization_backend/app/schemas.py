@@ -92,7 +92,6 @@ class MarkdownFixRequest(BaseModel):
     Richiesta di correzione bozze e formattazione.
     """
     text: str = Field(..., description="Testo con potenziali errori di formattazione o grammatica.")
-    tone: str = Field("professional", description="Tono di voce desiderato (es. 'friendly', 'academic').") 
     model: LLMModelEnum = Field(default=LLMModelEnum.LLAMA_8B)
 
 class MarkdownFixResponse(BaseModel):
@@ -112,12 +111,25 @@ class AudioGenerationRequest(BaseModel):
     """
     text: str = Field(..., example="Ciao, benvenuti al tour!")
     retry: bool = Field(False, description="Se True, forza la rigenerazione ignorando la cache.")
-    
+ 
     # Scelta del motore Audio
     tts_engine: TTSModelEnum = Field(
         default=TTSModelEnum.QUALITY_GPU,
         description="Scegli 'piper' per velocità/CPU o 'coqui-xtts' per qualità/GPU."
     )
+ 
+    # --- Aggiunte per l'integrazione con XRTourGuide ---
+    # Entrambi opzionali: se assenti, il modulo si comporta esattamente come
+    # prima (solo salvataggio su MinIO, nessuna notifica esterna).
+    waypoint_id: Optional[str] = Field(
+        default=None,
+        description="ID del Waypoint Django a cui è destinato l'audio, se la richiesta arriva dall'integrazione."
+    )
+    callback_url: Optional[str] = Field(
+        default=None,
+        description="URL a cui notificare (con l'audio allegato) il completamento della generazione."
+    )
+ 
 
 class AudioGenerationResponse(BaseModel):
     """

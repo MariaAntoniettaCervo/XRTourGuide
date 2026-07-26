@@ -176,12 +176,17 @@ services:
     environment:
       - PYTHONUNBUFFERED=1
       - OLLAMA_HOST=http://ollama:11434
+      - COQUI_TOS_AGREED=1
+
     env_file:
       - .env
     ports:
       - "8000:8000"
     networks:
       - backend_net
+    volumes:
+      - coqui_models:/root/.local/share
+
 
   ollama:
     image: ollama/ollama:latest
@@ -234,3 +239,4 @@ volumes:
   mysql_data_xr_tour_guide:
   minio_data:
   ollama_data:
+  coqui_models:

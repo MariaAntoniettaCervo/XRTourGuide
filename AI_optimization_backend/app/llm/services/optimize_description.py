@@ -51,10 +51,40 @@ def generate_optimized_description(original_text: str, model_name: str = "llama3
     constraints = """
     VINCOLI DI LUNGHEZZA E FORMATO (OBBLIGATORI):
     1. LUNGHEZZA: Devi generare un testo di ALMENO 130-150 parole. Se il testo originale è breve, USA LE TUE CONOSCENZE per arricchirlo con dettagli storici, curiosità e descrizioni visive pertinenti.
-    2. AUDIO CLEANING: 
+    2. AUDIO CLEANING:
        - Scrivi i numeri in lettere se necessario per la fluidità.
        - Niente parentesi, caratteri speciali o elenchi puntati.
+       - NON usare MAI le virgolette (" ' « ») da nessuna parte nel testo, nemmeno
+         per aprire o "mettere in scena" una frase come farebbe un narratore.
+         Il testo è narrato direttamente in prima persona dal divulgatore, non
+         è una citazione o un copione: scrivi le frasi senza racchiuderle tra
+         virgolette di alcun tipo.
     3. Ogni frase deve avere senso compiuto.
+
+    FORMATO DELL'OUTPUT (OBBLIGATORIO, NESSUNA ECCEZIONE):
+    - La tua risposta deve iniziare DIRETTAMENTE con la prima parola della
+      narrazione (es. "Benvenuti al Colosseo..."), MAI con un'introduzione,
+      un titolo, o un commento su cosa stai per fare.
+    - VIETATO iniziare con frasi come: "Ecco il testo ottimizzato:", "Ecco la
+      descrizione:", "Testo ottimizzato:", "Certo, ecco...", o qualsiasi altra
+      variante che annunci o commenti il contenuto prima di iniziarlo.
+    - La tua risposta deve TERMINARE con l'ultima frase della narrazione
+      stessa. Non aggiungere MAI, in nessuna forma o formulazione, un
+      commento finale su te stesso, sul tuo lavoro, o sul fatto di aver
+      seguito le istruzioni — anche se breve, anche se sembra utile o
+      professionale. Questo vale per QUALSIASI frase che parli DEL testo
+      invece di ESSERE il testo: non solo esempi come "Spero questo ti sia
+      utile" o "Fammi sapere se...", ma anche cose come "Nota: ho seguito le
+      linee guida...", "Come richiesto, il testo rispetta...", o qualsiasi
+      altra osservazione, disclaimer o commento meta-testuale, in qualunque
+      punto della risposta compaia.
+    - Test da applicare a te stesso prima di rispondere: ogni singola frase
+      che scrivi deve poter essere letta ad alta voce dal narratore come
+      parte della visita guidata. Se una frase non avrebbe senso detta da un
+      narratore che sta accompagnando un turista davanti al monumento (perché
+      parla DI te, del compito, o del testo stesso), quella frase va rimossa.
+    - L'intera risposta deve contenere ESCLUSIVAMENTE il testo narrato, dalla
+      prima all'ultima parola, pronto per essere letto ad alta voce così com'è.
     """
 
     user_prompt = f"""
@@ -67,7 +97,9 @@ def generate_optimized_description(original_text: str, model_name: str = "llama3
     {fact_checking_protocol}
     {constraints}
     
-    Rispondi SOLO con il testo ottimizzato.
+    Rispondi SOLO con il testo ottimizzato, seguendo esattamente il FORMATO
+    DELL'OUTPUT sopra indicato: nessuna introduzione, nessuna virgoletta,
+    nessun commento finale.
     """
 
     try:

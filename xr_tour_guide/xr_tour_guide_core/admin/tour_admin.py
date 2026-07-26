@@ -398,14 +398,6 @@ class TourAdmin(nested_admin.NestedModelAdmin, ModelAdmin):
 
         return super().formfield_for_manytomany(db_field, request, **kwargs)
 
-    # def get_queryset(self, request):
-    #     qs = super().get_queryset(request)
-        
-    #     if not request.user.is_superuser:
-    #         qs = qs.filter(user=request.user)
-
-    #     return qs
-    
     def get_queryset(self, request):
        qs = super().get_queryset(request)
        return visible_tours_queryset(request.user, qs)
@@ -445,6 +437,10 @@ class TourAdmin(nested_admin.NestedModelAdmin, ModelAdmin):
             if form.instance not in subtour.parent_tours.all():
                 subtour.parent_tours.add(form.instance)
 
+        from xr_tour_guide.tasks import commit_pending_audio_task
+        for waypoint in form.instance.waypoints.all():
+            commit_pending_audio_task.apply_async(args=[waypoint.pk], queue='api_tasks')
+
     def delete_model(self, request, obj):
         if obj.status in ['SERVING', 'BUILDING', 'ENQUEUED']:
             self.message_user(
@@ -478,28 +474,6 @@ class TourAdmin(nested_admin.NestedModelAdmin, ModelAdmin):
             extra_context["title"] = f"Edit"
         
         return super().change_view(request, object_id, form_url, extra_context)
-    
-    # def has_change_permission(self, request, obj=None):
-    #     has_permission = super().has_change_permission(request, obj)
-    #     if not has_permission:
-    #         return False
-    #     if obj is None:
-    #         return True
-    #     if obj.status in ['BUILDING', 'SERVING', 'ENQUEUED']:
-    #         return False
-    #     return True
-
-    # def has_delete_permission(self, request, obj=None):
-    #     has_permission = super().has_delete_permission(request, obj)
-    #     if not has_permission:
-    #         return False
-    #     if obj is None:
-    #         return True
-    #     if obj.status in ['SERVING', 'BUILDING', 'ENQUEUED']:
-    #         return False
-    #     if not request.user.is_superuser and obj.user != request.user:
-    #         return False
-    #     return True
 
     def has_change_permission(self, request, obj=None):
         has_permission = super().has_change_permission(request, obj)
