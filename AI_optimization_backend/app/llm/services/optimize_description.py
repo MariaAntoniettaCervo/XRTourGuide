@@ -1,17 +1,21 @@
 from app.llm.factory import LLMFactory
 from app.schemas import DescriptionResponse
 
-def generate_optimized_description(original_text: str, model_name: str = "llama3.1:8b") -> DescriptionResponse:
+def generate_optimized_description(original_text: str, model_name: str = "llama3.1:8b", length_mode: str = "lungo") -> DescriptionResponse:
     """
-    Riscrive una descrizione turistica ottimizzandola per l'ascolto (Storytelling Audio).
+    Riscrive una descrizione turistica ottimizzandola per l'ascolto (Storytelling Audio)
+    o per un'anteprima breve, secondo il contesto (length_mode).
 
     Questa funzione utilizza un LLM per trasformare un testo grezzo o breve in una narrazione
-    coinvolgente, stile "divulgatore culturale".
+    coinvolgente, stile "divulgatore culturale" — oppure, se length_mode="breve", in
+    un'anteprima concisa pensata per un elenco di punti d'interesse.
 
-    
     Args:
         original_text (str): Il testo di input (es. "Statua del 1500 in marmo").
         model_name (str, optional): Il modello LLM da utilizzare (default: "llama3.1:8b").
+        length_mode (str, optional): "lungo" per la descrizione completa (Tour, narrazione
+            estesa da audio-guida, almeno 130-150 parole) oppure "breve" per l'anteprima
+            di un Waypoint (max 2-3 frasi, pensata per un elenco, NON va espansa).
 
     Returns:
         DescriptionResponse: Un oggetto contenente:
@@ -48,19 +52,7 @@ def generate_optimized_description(original_text: str, model_name: str = "llama3
     4. Se il testo originale contiene un errore palese, correggilo basandoti sulla tua conoscenza enciclopedica.
     """
 
-    constraints = """
-    VINCOLI DI LUNGHEZZA E FORMATO (OBBLIGATORI):
-    1. LUNGHEZZA: Devi generare un testo di ALMENO 130-150 parole. Se il testo originale è breve, USA LE TUE CONOSCENZE per arricchirlo con dettagli storici, curiosità e descrizioni visive pertinenti.
-    2. AUDIO CLEANING:
-       - Scrivi i numeri in lettere se necessario per la fluidità.
-       - Niente parentesi, caratteri speciali o elenchi puntati.
-       - NON usare MAI le virgolette (" ' « ») da nessuna parte nel testo, nemmeno
-         per aprire o "mettere in scena" una frase come farebbe un narratore.
-         Il testo è narrato direttamente in prima persona dal divulgatore, non
-         è una citazione o un copione: scrivi le frasi senza racchiuderle tra
-         virgolette di alcun tipo.
-    3. Ogni frase deve avere senso compiuto.
-
+    output_format_block = """
     FORMATO DELL'OUTPUT (OBBLIGATORIO, NESSUNA ECCEZIONE):
     - La tua risposta deve iniziare DIRETTAMENTE con la prima parola della
       narrazione (es. "Benvenuti al Colosseo..."), MAI con un'introduzione,
@@ -86,6 +78,40 @@ def generate_optimized_description(original_text: str, model_name: str = "llama3
     - L'intera risposta deve contenere ESCLUSIVAMENTE il testo narrato, dalla
       prima all'ultima parola, pronto per essere letto ad alta voce così com'è.
     """
+
+    if length_mode == "breve":
+        constraints = f"""
+        VINCOLI DI LUNGHEZZA E FORMATO (OBBLIGATORI):
+        1. LUNGHEZZA MASSIMA: questo testo è un'ANTEPRIMA che apparirà in un
+           elenco di punti d'interesse (lista), NON una narrazione estesa.
+           Massimo 2-3 frasi brevi, non oltre le 40-50 parole in totale.
+           NON allungare o espandere il testo originale con nuovi dettagli
+           storici: rendilo solo più scorrevole, accattivante e corretto
+           grammaticalmente, mantenendone la brevità.
+        2. AUDIO CLEANING:
+           - Scrivi i numeri in lettere se necessario per la fluidità.
+           - Niente parentesi, caratteri speciali o elenchi puntati.
+           - NON usare MAI le virgolette (" ' « ») da nessuna parte nel testo.
+        3. Ogni frase deve avere senso compiuto.
+
+        {output_format_block}
+        """
+    else:
+        constraints = f"""
+        VINCOLI DI LUNGHEZZA E FORMATO (OBBLIGATORI):
+        1. LUNGHEZZA: Devi generare un testo di ALMENO 130-150 parole. Se il testo originale è breve, USA LE TUE CONOSCENZE per arricchirlo con dettagli storici, curiosità e descrizioni visive pertinenti.
+        2. AUDIO CLEANING:
+           - Scrivi i numeri in lettere se necessario per la fluidità.
+           - Niente parentesi, caratteri speciali o elenchi puntati.
+           - NON usare MAI le virgolette (" ' « ») da nessuna parte nel testo, nemmeno
+             per aprire o "mettere in scena" una frase come farebbe un narratore.
+             Il testo è narrato direttamente in prima persona dal divulgatore, non
+             è una citazione o un copione: scrivi le frasi senza racchiuderle tra
+             virgolette di alcun tipo.
+        3. Ogni frase deve avere senso compiuto.
+
+        {output_format_block}
+        """
 
     user_prompt = f"""
     {system_role}

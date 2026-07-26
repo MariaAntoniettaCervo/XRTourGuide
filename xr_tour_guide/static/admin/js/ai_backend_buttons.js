@@ -278,7 +278,11 @@
             if (!text) return alert("Scrivi prima una descrizione da ottimizzare.");
             expandPill(wandBtn, wandLabel, "Avvio...");
             try {
-                const start = await callAiBackend("optimize-description/start", { original_text: text, model: getModel() });
+                const start = await callAiBackend("optimize-description/start", {
+                    original_text: text,
+                    model: getModel(),
+                    length_mode: options.lengthMode || "lungo",
+                });
                 inFlightTextJobs.add(start.job_id);
                 pollTextJob(wandBtn, wandLabel, start.job_id, (data) => {
                     if (data.full_text_optimized) descField.value = data.full_text_optimized;
@@ -330,27 +334,18 @@
                     }
                 });
 
-                // Ripresa al caricamento della pagina: se una generazione era
-                // già in corso (o già pronta ma mai mostrata, es. perché hai
-                // salvato/ricaricato prima che finisse), la recuperiamo subito
-                // invece di aspettare un nuovo click — così l'anteprima resta
-                // sempre visibile, senza conferme silenziose in background.
                 const resumeWaypointId = options.getWaypointId();
                 if (resumeWaypointId) {
                     fetch(`/ai-backend/generate-audio/status/?waypoint_id=${encodeURIComponent(resumeWaypointId)}`)
                         .then((r) => r.json())
                         .then((result) => {
                             if (result.status === "processing") {
-                                expandPill(audioBtn, audioLabel, "In corso...");
+                                expandPill(audioBtn, audioLabel, result.stale_text ? "In corso (testo non salvato)..." : "In corso...");
                                 pollAudioStatus(audioBtn, audioLabel, resumeWaypointId, wrapper);
                             } else if (result.status === "preview_ready") {
-                                const widget = makePreviewAudioWidget(resumeWaypointId);
+                                const widget = makePreviewAudioWidget(resumeWaypointId, result.stale_text);
                                 wrapper.insertAdjacentElement("afterend", widget);
-                                // Il widget da solo non sa se, un attimo dopo,
-                                // il commit finisce davvero (era già in corso
-                                // al momento del ricaricamento) — senza questo
-                                // controllo in più, resterebbe visibile per
-                                // sempre anche a conferma avvenuta.
+                        
                                 watchResumedPreview(resumeWaypointId);
                             }
                         })
@@ -366,9 +361,42 @@
 
         const descField = (context || document).querySelector("#id_description");
         if (descField) {
-            setupDescriptionControls(descField, {});
+            setupDescriptionControls(descField, { lengthMode: "lungo" });
         }
     }
+
+    // --- Abbandono audio in corso (solo se si naviga via SENZA salvare) ---
+    // Non possiamo fermare la sintesi vera (gira nel modulo AI, un processo
+    // separato) — ci limitiamo a segnalare "quando arriva, buttalo via",
+    // così l'utente non si ritrova un'anteprima basata su un testo mai
+    // salvato. Se invece si sta salvando davvero (submit del form), NON
+    // segnaliamo l'abbandono: quello è lo scenario in cui la generazione
+    // deve continuare e essere ripresa normalmente al ritorno sulla pagina.
+    const inFlightAudioWaypoints = new Set();
+    let isSubmittingForm = false;
+
+    document.addEventListener("submit", () => {
+        isSubmittingForm = true;
+    });
+
+    function abandonInFlightAudio() {
+        if (isSubmittingForm) return; // si sta salvando: la generazione deve continuare
+        inFlightAudioWaypoints.forEach((waypointId) => {
+            fetch("/ai-backend/generate-audio/abandon/", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "X-CSRFToken": getCookie("csrftoken"),
+                },
+                body: JSON.stringify({ waypoint_id: waypointId }),
+                keepalive: true,
+            }).catch(() => {});
+        });
+        inFlightAudioWaypoints.clear();
+    }
+
+    window.addEventListener("beforeunload", abandonInFlightAudio);
+    window.addEventListener("pagehide", abandonInFlightAudio);
 
     // --- Annullamento ottimizzazioni testo in corso all'abbandono pagina ---
     // Riguarda solo titolo/descrizione/markdown: se navighi via prima che
@@ -402,7 +430,7 @@
 
     async function pollTextJob(button, label, jobId, onReady, attempt = 0) {
         const POLL_INTERVAL_MS = 3000;
-        const MAX_ATTEMPTS = 60; // ~3 minuti
+        const MAX_ATTEMPTS = 200; // ~10 minuti, allineato al nuovo timeout backend (600s)
 
         if (attempt >= MAX_ATTEMPTS) {
             label.textContent = "Timeout";
@@ -438,16 +466,30 @@
         setTimeout(() => pollTextJob(button, label, jobId, onReady, attempt + 1), POLL_INTERVAL_MS);
     }
 
-    function makePreviewAudioWidget(waypointId) {
+    function makePreviewAudioWidget(waypointId, staleText) {
         // Rimuove un'eventuale anteprima precedente non ancora decisa per lo
         // stesso waypoint, per non accumulare widget se si rigenera più volte.
         document.querySelectorAll(`[data-ai-preview-for="${waypointId}"]`).forEach((el) => el.remove());
 
+        const wrapper = document.createElement("div");
+        wrapper.dataset.aiPreviewFor = waypointId;
+        wrapper.style.cssText = "display:flex; flex-direction:column; gap:4px; margin-top:6px;";
+
+        if (staleText) {
+            const staleBadge = document.createElement("div");
+            staleBadge.style.cssText =
+                "display:inline-flex; align-items:center; gap:6px; padding:4px 10px; " +
+                "border-radius:14px; background:#fef3c7; color:#92400e; font-size:12px; font-weight:600;";
+            staleBadge.textContent = "⚠️ Generata da un testo non più salvato";
+            wrapper.appendChild(staleBadge);
+        }
+
         const container = document.createElement("div");
         container.dataset.aiPreviewFor = waypointId;
         container.style.cssText =
-            "display:inline-flex; align-items:center; gap:8px; margin-top:6px; padding:6px 10px; " +
+            "display:inline-flex; align-items:center; gap:8px; padding:6px 10px; " +
             "border-radius:20px; background:#eff6ff; border:1px solid #2563eb55;";
+        wrapper.appendChild(container);
 
         const audio = document.createElement("audio");
         audio.src = `/ai-backend/generate-audio/preview/?waypoint_id=${encodeURIComponent(waypointId)}`;
@@ -541,7 +583,7 @@
             audio.pause();
             try {
                 await callAiBackend("generate-audio/discard", { waypoint_id: waypointId });
-                container.remove();
+                wrapper.remove();
             } catch (e) {
                 alert("Errore nello scarto dell'anteprima: " + e.message);
                 discardBtn.disabled = false;
@@ -554,7 +596,7 @@
         container.appendChild(track);
         container.appendChild(timeLabel);
         container.appendChild(discardBtn);
-        return container;
+        return wrapper;
     }
 
     async function pollAudioStatus(button, label, waypointId, anchorElement, attempt = 0) {
@@ -579,7 +621,7 @@
 
         if (result.status === "preview_ready") {
             collapsePill(button, label);
-            const widget = makePreviewAudioWidget(waypointId);
+            const widget = makePreviewAudioWidget(waypointId, result.stale_text);
             anchor.insertAdjacentElement("afterend", widget);
             return;
         }
@@ -591,6 +633,11 @@
             setTimeout(() => collapsePill(button, label), 3000);
             return;
         }
+
+        button.title = result.stale_text
+            ? "Questa generazione si riferisce a un testo non più salvato"
+            : "";
+        label.textContent = result.stale_text ? "In corso (testo non salvato)..." : "In corso...";
 
         setTimeout(() => pollAudioStatus(button, label, waypointId, anchorElement, attempt + 1), POLL_INTERVAL_MS);
     }
@@ -767,6 +814,7 @@
             const waypointId = idField ? idField.value : null;
 
             setupDescriptionControls(descField, {
+                lengthMode: "breve",
                 audio: !!audioField,
                 audioLabel: "Genera audio da questa descrizione",
                 disabledReason: waypointId ? null : "Salva prima il waypoint per generare l'audio",

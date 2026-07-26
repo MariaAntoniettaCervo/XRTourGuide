@@ -69,12 +69,13 @@ def optimize_description_start(request):
     data = _read_json(request)
     original_text = (data.get("original_text") or "").strip()
     model = data.get("model") or "llama3.1:8b"
+    length_mode = data.get("length_mode") or "lungo"
     if not original_text:
         return JsonResponse({"error": "original_text mancante"}, status=400)
 
     job_id = str(uuid.uuid4())
     async_result = optimize_text_task.apply_async(
-        args=[job_id, "description", {"original_text": original_text, "model": model}], queue='api_tasks'
+        args=[job_id, "description", {"original_text": original_text, "model": model, "length_mode": length_mode}], queue='api_tasks'
     )
     caches["redis"].set(f"ai_job_task_id:{job_id}", async_result.id, timeout=600)
     return JsonResponse({"status": "processing", "job_id": job_id})
@@ -209,6 +210,12 @@ def generate_audio_status(request):
     il form intero, che lo conferma automaticamente). "ready" resta per
     compatibilità nei rari casi in cui l'anteprima sia già stata confermata
     (dalla rete di sicurezza del signal) prima che il polling arrivasse qui.
+
+    Include anche "stale_text": True se il testo che ha originato QUESTA
+    generazione (in corso o in anteprima) non corrisponde più al testo
+    attualmente salvato — tipico di chi genera l'audio da un testo poi
+    abbandonato senza salvare (es. ricarica la pagina prima di salvare).
+    Serve solo a informare l'utente: la generazione prosegue comunque.
     """
     waypoint_id = request.GET.get("waypoint_id")
     if not waypoint_id:
@@ -218,16 +225,51 @@ def generate_audio_status(request):
     if error:
         return error
 
+    pending_hash = caches["redis"].get(f"audio_pending_hash:{waypoint_id}")
+    stale_text = False
+    if pending_hash:
+        current_hash = hashlib.md5((waypoint.description or "").encode("utf-8")).hexdigest()
+        stale_text = pending_hash != current_hash
+
     if caches["redis"].get(f"audio_pending:{waypoint_id}"):
-        return JsonResponse({"status": "processing"})
+        return JsonResponse({"status": "processing", "stale_text": stale_text})
 
     if caches["redis"].get(f"audio_preview:{waypoint_id}") is not None:
-        return JsonResponse({"status": "preview_ready"})
+        return JsonResponse({"status": "preview_ready", "stale_text": stale_text})
 
     if waypoint.audio_item and waypoint.audio_item.name:
         return JsonResponse({"status": "ready"})
 
-    return JsonResponse({"status": "processing"})
+    # Nessuna delle condizioni sopra: non è "in corso", è semplicemente che
+    # non è mai successo nulla per questo waypoint (es. appena creato, mai
+    # generato audio). Distinto da "processing" per non far comparire "In
+    # corso..." al caricamento pagina per waypoint senza nessuna storia audio.
+    return JsonResponse({"status": "idle"})
+
+
+@login_required
+@require_POST
+def generate_audio_abandon(request):
+    """
+    Segnala che una generazione audio in corso è stata abbandonata (l'utente
+    ha lasciato la pagina senza salvare il testo su cui era basata). Non ferma
+    il calcolo vero (gira nel modulo AI, un processo separato non revocabile
+    da qui) — si limita a dire "quando il risultato arriva, buttalo via".
+
+    Non va chiamato se l'abbandono è in realtà un salvataggio (in quel caso
+    vogliamo che la generazione continui e venga ripresa normalmente, vedi
+    watchResumedPreview in ai_backend_buttons.js).
+    """
+    data = _read_json(request)
+    waypoint_id = data.get("waypoint_id")
+    if not waypoint_id:
+        return JsonResponse({"error": "waypoint_id obbligatorio"}, status=400)
+
+    # Stesso TTL di audio_pending: non ha senso restare "abbandonato" più a
+    # lungo della finestra in cui una generazione potrebbe ancora arrivare.
+    caches["redis"].set(f"audio_abandoned:{waypoint_id}", True, timeout=900)
+
+    return JsonResponse({"ok": True})
 
 
 @csrf_exempt
@@ -258,6 +300,15 @@ def generate_audio_callback(request):
         Waypoint.objects.get(pk=waypoint_id)
     except Waypoint.DoesNotExist:
         return JsonResponse({"error": "Waypoint non trovato"}, status=404)
+
+    # Se l'utente ha abbandonato la pagina senza salvare il testo su cui era
+    # basata questa generazione, il risultato non serve più a nessuno —
+    # buttiamo via i byte appena ricevuti invece di metterli in anteprima.
+    if caches["redis"].get(f"audio_abandoned:{waypoint_id}"):
+        caches["redis"].delete(f"audio_pending:{waypoint_id}")
+        caches["redis"].delete(f"audio_pending_hash:{waypoint_id}")
+        caches["redis"].delete(f"audio_abandoned:{waypoint_id}")
+        return JsonResponse({"ok": True, "discarded": True})
 
     audio_bytes = audio_file.read()
     caches["redis"].set(f"audio_preview:{waypoint_id}", audio_bytes, timeout=1800)  # 30 minuti

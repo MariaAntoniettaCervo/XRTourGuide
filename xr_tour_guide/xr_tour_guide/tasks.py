@@ -368,7 +368,7 @@ def optimize_text_task(self, job_id, kind, payload):
     payload: dict già pronto per il modulo AI (es. {"original_title": "..."}).
 
     Nessun timeout web qui: il task gira nel worker Celery, non in una richiesta
-    HTTP, quindi non è soggetto ai limiti di nginx/gunicorn che ci hanno bloccato.
+    HTTP.
     """
     cache = caches["redis"]
     endpoint = _OPTIMIZE_ENDPOINTS.get(kind, "optimize/title")
@@ -377,7 +377,7 @@ def optimize_text_task(self, job_id, kind, payload):
         response = requests.post(
             f"{AI_BACKEND_ENDPOINT}/{endpoint}",
             json=payload,
-            timeout=300,  # generoso: qui non costa nulla aspettare, nessuno è bloccato
+            timeout=600,  
         )
         response.raise_for_status()
         cache.set(f"ai_job:{job_id}", {"status": "ready", "data": response.json()}, timeout=AI_JOB_CACHE_TTL_SECONDS)
@@ -388,27 +388,6 @@ def optimize_text_task(self, job_id, kind, payload):
         cache.set(f"ai_job:{job_id}", {"status": "error", "error": str(e)}, timeout=AI_JOB_CACHE_TTL_SECONDS)
         raise self.retry(exc=e)
 
-
-# --- Calcolo chunks TTS al salvataggio di Tour/Waypoint ---
-
-@shared_task(queue='api_tasks')
-def compute_chunks_task(text):
-    """
-    Chiamata dai signal post_save di Tour/Waypoint (vedi signals_ai_backend.py).
-    Nessuna attesa lato admin: gira in background, non blocca il salvataggio.
-    """
-    try:
-        response = requests.post(
-            f"{AI_BACKEND_ENDPOINT}/compute-chunks",
-            json={"text": text},
-            timeout=30,
-        )
-        response.raise_for_status()
-        print(f"compute_chunks_task: chunks calcolati per testo di {len(text)} caratteri")
-    except Exception as e:
-        # Non critico: se fallisce, /generate-audio ricalcolerà i chunks al volo
-        # (fallback già esistente in background_audio_task). Solo un log.
-        print(f"compute_chunks_task: errore (non bloccante): {e}")
 
 # --- Conferma anteprima audio in sospeso (rete di sicurezza al salvataggio) ---
 
@@ -434,3 +413,25 @@ def commit_pending_audio_task(waypoint_id):
         _commit_audio_preview(waypoint)
     except Exception as e:
         print(f"commit_pending_audio_task: errore (non bloccante): {e}")
+
+
+# --- Calcolo chunks TTS al salvataggio di Tour/Waypoint ---
+
+@shared_task(queue='api_tasks')
+def compute_chunks_task(text):
+    """
+    Chiamata dai signal post_save di Tour/Waypoint (vedi signals_ai_backend.py).
+    Nessuna attesa lato admin: gira in background, non blocca il salvataggio.
+    """
+    try:
+        response = requests.post(
+            f"{AI_BACKEND_ENDPOINT}/compute-chunks",
+            json={"text": text},
+            timeout=30,
+        )
+        response.raise_for_status()
+        print(f"compute_chunks_task: chunks calcolati per testo di {len(text)} caratteri")
+    except Exception as e:
+        # Non critico: se fallisce, /generate-audio ricalcolerà i chunks al volo
+        # (fallback già esistente in background_audio_task). Solo un log.
+        print(f"compute_chunks_task: errore (non bloccante): {e}")

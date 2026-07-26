@@ -70,6 +70,16 @@ class DescriptionRequest(BaseModel):
         description="Modello LLM per la riscrittura."
     )
 
+    length_mode: str = Field(
+        default="lungo",
+        description=(
+            "'lungo' per la descrizione completa del Tour (narrazione estesa da "
+            "audio-guida, almeno 130-150 parole) oppure 'breve' per l'anteprima "
+            "di un Waypoint (max 2-3 frasi, pensata per un elenco di punti "
+            "d'interesse, NON va espansa con nuovi dettagli)."
+        )
+    )
+
 class DescriptionResponse(BaseModel):
     """
     Risultato dell'ottimizzazione descrizione.

@@ -269,7 +269,11 @@ async def optimize_description_endpoint(request: DescriptionRequest):
     if not request.original_text:
         raise HTTPException(status_code=400, detail="Il testo non può essere vuoto")
 
-    result = generate_optimized_description(request.original_text, model_name=request.model.value)
+    result = generate_optimized_description(
+        request.original_text,
+        model_name=request.model.value,
+        length_mode=request.length_mode,
+    )
     return result
 
 @app.post(
